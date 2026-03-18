@@ -1,7 +1,7 @@
 export type CEFRLevel = 'B1' | 'B2' | 'C1' | 'C2';
 
 export type SupportedLanguage =
-  | 'es' | 'fr' | 'de' | 'it' | 'pt'
+  | 'en' | 'es' | 'fr' | 'de' | 'it' | 'pt'
   | 'ja' | 'zh' | 'ko' | 'ru' | 'ar'
   | 'nl' | 'pl' | 'tr' | 'sv' | 'da' | 'no';
 
@@ -30,6 +30,7 @@ export interface UserSettings {
 }
 
 export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
+  en: 'English',
   es: 'Spanish',
   fr: 'French',
   de: 'German',
@@ -46,6 +47,26 @@ export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   sv: 'Swedish',
   da: 'Danish',
   no: 'Norwegian',
+};
+
+export const LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
+  en: '🇬🇧',
+  es: '🇪🇸',
+  fr: '🇫🇷',
+  de: '🇩🇪',
+  it: '🇮🇹',
+  pt: '🇵🇹',
+  ja: '🇯🇵',
+  zh: '🇨🇳',
+  ko: '🇰🇷',
+  ru: '🇷🇺',
+  ar: '🇸🇦',
+  nl: '🇳🇱',
+  pl: '🇵🇱',
+  tr: '🇹🇷',
+  sv: '🇸🇪',
+  da: '🇩🇰',
+  no: '🇳🇴',
 };
 
 export const CEFR_DESCRIPTORS: Record<CEFRLevel, string> = {

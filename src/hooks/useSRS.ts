@@ -7,10 +7,10 @@ export function useSRS() {
   const { session } = useAuthStore();
 
   useEffect(() => {
-    if (session?.user_id) {
-      loadDueCards(session.user_id);
+    if (session?.user.id) {
+      loadDueCards(session.user.id);
     }
-  }, [session?.user_id, loadDueCards]);
+  }, [session?.user.id, loadDueCards]);
 
   return { dueCards, dueCount, isLoading, recordReview };
 }
