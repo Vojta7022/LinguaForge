@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { ExerciseType } from '@/types/exercise';
+import type { ExerciseContent } from '@/types/exercise';
 
-// ---------- Content schemas ----------
+// ─── Core content schemas (used as TS types elsewhere) ────────────────────
 
 export const FillBlankSchema = z.object({
   type: z.literal('FILL_BLANK'),
@@ -82,39 +82,87 @@ export const ListeningSchema = z.object({
   transcript: z.string().optional(),
 });
 
-export const ExerciseContentSchema = z.discriminatedUnion('type', [
-  FillBlankSchema,
-  SentenceReorderSchema,
-  TranslateSchema,
-  MultipleChoiceSchema,
-  ErrorCorrectionSchema,
-  ClozeSchema,
-  IdiomMatchSchema,
-  ContextualVocabSchema,
-  ListeningSchema,
-]);
+// ─── Metadata extension (flat — mixed into each exercise object) ──────────
 
-export const AIResponseSchema = z.object({
-  exercises: z.array(z.object({
-    content: ExerciseContentSchema,
-    difficulty_score: z.number().int().min(1).max(100).optional(),
-    grammar_point: z.string().nullable().optional(),
-    vocab_topic: z.string().nullable().optional(),
-  })).min(1),
+const aiMetaSchema = z.object({
+  difficulty_score: z.number().int().min(1).max(100).optional(),
+  grammar_point: z.string().nullable().optional(),
+  vocab_topic: z.string().nullable().optional(),
 });
 
-export type ValidatedAIResponse = z.infer<typeof AIResponseSchema>;
+// ─── AI response schemas (content + metadata, all at top level) ───────────
 
-/** Parse and validate raw AI JSON output. Throws ZodError if invalid. */
-export function parseAIResponse(raw: string): ValidatedAIResponse {
+const FillBlankAISchema = FillBlankSchema.merge(aiMetaSchema);
+const SentenceReorderAISchema = SentenceReorderSchema.merge(aiMetaSchema);
+const TranslateAISchema = TranslateSchema.merge(aiMetaSchema);
+const MultipleChoiceAISchema = MultipleChoiceSchema.merge(aiMetaSchema);
+const ErrorCorrectionAISchema = ErrorCorrectionSchema.merge(aiMetaSchema);
+const ClozeAISchema = ClozeSchema.merge(aiMetaSchema);
+const IdiomMatchAISchema = IdiomMatchSchema.merge(aiMetaSchema);
+const ContextualVocabAISchema = ContextualVocabSchema.merge(aiMetaSchema);
+const ListeningAISchema = ListeningSchema.merge(aiMetaSchema);
+
+export const AIExerciseSchema = z.discriminatedUnion('type', [
+  FillBlankAISchema,
+  SentenceReorderAISchema,
+  TranslateAISchema,
+  MultipleChoiceAISchema,
+  ErrorCorrectionAISchema,
+  ClozeAISchema,
+  IdiomMatchAISchema,
+  ContextualVocabAISchema,
+  ListeningAISchema,
+]);
+
+export const AIBatchResponseSchema = z.object({
+  exercises: z.array(AIExerciseSchema).min(1),
+});
+
+export type AIExerciseRaw = z.infer<typeof AIExerciseSchema>;
+export type AIBatchResponse = z.infer<typeof AIBatchResponseSchema>;
+
+// ─── Parsing ──────────────────────────────────────────────────────────────
+
+/**
+ * Strips markdown fences, parses JSON, and validates the batch response.
+ * Throws with a descriptive message on failure.
+ */
+export function parseAIBatch(raw: string): AIExerciseRaw[] {
+  // Strip ``` code fences if present
+  let cleaned = raw.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) cleaned = fenceMatch[1].trim();
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch {
-    // Try to extract JSON object from malformed response
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON found in AI response');
-    parsed = JSON.parse(match[0]);
+    // Attempt to extract a JSON object from a partially-wrapped response
+    const objMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!objMatch) {
+      throw new Error(`No JSON object found in AI response. Raw: ${cleaned.slice(0, 200)}`);
+    }
+    parsed = JSON.parse(objMatch[0]);
   }
-  return AIResponseSchema.parse(parsed);
+
+  const result = AIBatchResponseSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `AI response validation failed:\n${result.error.issues
+        .map((i) => `  [${i.path.join('.')}] ${i.message}`)
+        .join('\n')}\n\nRaw response (first 500 chars):\n${cleaned.slice(0, 500)}`,
+    );
+  }
+
+  return result.data.exercises;
+}
+
+/**
+ * Extracts just the content fields (drops AI metadata) from a raw exercise.
+ * Safe cast: metadata fields were already stripped by destructuring.
+ */
+export function extractContent(raw: AIExerciseRaw): ExerciseContent {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { difficulty_score, grammar_point, vocab_topic, ...content } = raw;
+  return content as unknown as ExerciseContent;
 }
