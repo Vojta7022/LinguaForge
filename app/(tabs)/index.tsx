@@ -6,12 +6,13 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useEffect, useCallback, useRef } from 'react';
 import { useUserStore } from '@/stores/userStore';
 import { useGamificationStore } from '@/stores/gamificationStore';
 import { useLessonStore } from '@/stores/lessonStore';
-import { LESSONS } from '@/utils/lessonData';
+import { LESSONS, generateMoreLessons } from '@/utils/lessonData';
+import { generateLessonTitle } from '@/services/ai/exerciseGenerator';
 import type { LessonDefinition } from '@/utils/lessonData';
 
 function PulseDot() {
@@ -35,12 +36,20 @@ function PulseDot() {
 function LessonNode({
   lesson,
   status,
+  accuracyPct,
 }: {
   lesson: LessonDefinition;
   status: 'completed' | 'active' | 'locked';
+  accuracyPct?: number;
 }) {
   const isLocked = status === 'locked';
   const isCompleted = status === 'completed';
+
+  // Color-code accuracy
+  const accuracyColor =
+    accuracyPct === undefined ? '' :
+    accuracyPct >= 80 ? 'text-green-600' :
+    accuracyPct >= 60 ? 'text-amber-600' : 'text-red-500';
 
   function handlePress() {
     if (isLocked) return;
@@ -85,6 +94,11 @@ function LessonNode({
         <Text className="text-slate-500 text-sm" numberOfLines={1}>
           {lesson.description}
         </Text>
+        {isCompleted && accuracyPct !== undefined ? (
+          <Text className={`text-xs font-semibold mt-0.5 ${accuracyColor}`}>
+            {accuracyPct}% accuracy{isCompleted ? ' · Redo' : ''}
+          </Text>
+        ) : null}
       </View>
 
       {/* Arrow */}
@@ -99,8 +113,69 @@ function LessonNode({
 
 export default function HomeScreen() {
   const user = useUserStore((s) => s.user);
+  const loadFromDB = useUserStore((s) => s.loadFromDB);
+  const initFromUser = useGamificationStore((s) => s.initFromUser);
   const dailyGoal = useGamificationStore((s) => s.dailyGoal);
   const completedIds = useLessonStore((s) => s.completedLessonIds);
+  const lessonAccuracy = useLessonStore((s) => s.lessonAccuracy);
+  const generatedLessons = useLessonStore((s) => s.generatedLessons);
+  const addGeneratedLessons = useLessonStore((s) => s.addGeneratedLessons);
+
+  const allLessons = [...LESSONS, ...generatedLessons];
+  const isPrefetchingRef = useRef(false);
+
+  // FIX 5: refresh XP/streak from SQLite when tab gains focus
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
+
+  useFocusEffect(
+    useCallback(() => {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      loadFromDB(uid).then(() => {
+        const refreshed = useUserStore.getState().user;
+        if (refreshed) initFromUser(refreshed);
+      }).catch(() => {/* ignore */});
+    }, [loadFromDB, initFromUser]),
+  );
+
+  // Prefetch 3 new lessons when user reaches the second-to-last available lesson
+  useEffect(() => {
+    if (!user || isPrefetchingRef.current) return;
+
+    // Find last unlocked lesson index
+    let lastAvailableIdx = -1;
+    for (let i = 0; i < allLessons.length; i++) {
+      const lesson = allLessons[i];
+      if (completedIds.includes(lesson.id) || i === 0 || completedIds.includes(allLessons[i - 1].id)) {
+        lastAvailableIdx = i;
+      }
+    }
+
+    // Trigger prefetch when on second-to-last lesson
+    const shouldPrefetch = lastAvailableIdx >= allLessons.length - 2;
+    if (!shouldPrefetch) return;
+
+    isPrefetchingRef.current = true;
+    const existingTopics = allLessons.map((l) => l.topic);
+    const newLessons = generateMoreLessons(existingTopics, user.current_level, 3);
+
+    // Fetch AI-generated titles in parallel
+    Promise.allSettled(
+      newLessons.map((l) =>
+        generateLessonTitle(l.topic, user.current_level, user.target_language)
+          .then((title) => ({ ...l, title }))
+          .catch(() => l),
+      ),
+    ).then((results) => {
+      const withTitles = results
+        .filter((r) => r.status === 'fulfilled')
+        .map((r) => (r as PromiseFulfilledResult<LessonDefinition>).value);
+      if (withTitles.length > 0) addGeneratedLessons(withTitles);
+    }).finally(() => {
+      isPrefetchingRef.current = false;
+    });
+  }, [completedIds.length, allLessons.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const xp = user?.xp ?? 0;
   const streak = user?.streak_count ?? 0;
@@ -109,12 +184,11 @@ export default function HomeScreen() {
   const earnedXp = dailyGoal.earned_xp;
   const goalProgress = Math.min(1, goalXp > 0 ? earnedXp / goalXp : 0);
 
-  // Determine lesson statuses: a lesson is unlocked if the previous one is done
   function getLessonStatus(index: number): 'completed' | 'active' | 'locked' {
-    const lesson = LESSONS[index];
+    const lesson = allLessons[index];
     if (completedIds.includes(lesson.id)) return 'completed';
     if (index === 0) return 'active';
-    const prev = LESSONS[index - 1];
+    const prev = allLessons[index - 1];
     return completedIds.includes(prev.id) ? 'active' : 'locked';
   }
 
@@ -168,11 +242,12 @@ export default function HomeScreen() {
         {/* Lesson path */}
         <View className="bg-white rounded-2xl p-5 border border-slate-100">
           <Text className="text-slate-800 font-bold text-lg mb-4">Your Path</Text>
-          {LESSONS.map((lesson, index) => (
+          {allLessons.map((lesson, index) => (
             <LessonNode
               key={lesson.id}
               lesson={lesson}
               status={getLessonStatus(index)}
+              accuracyPct={lessonAccuracy[lesson.id]}
             />
           ))}
         </View>

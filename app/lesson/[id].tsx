@@ -13,14 +13,16 @@ import { shuffle } from '@/utils/exerciseHelpers';
 import { getLessonById } from '@/utils/lessonData';
 import type { Exercise } from '@/types/exercise';
 
-// How many exercises per type to include in a lesson
+// FIX 4: 15 exercises per lesson
 const PER_TYPE = {
-  FILL_BLANK: 4,
+  FILL_BLANK: 5,
   MULTIPLE_CHOICE: 3,
   TRANSLATE: 2,
-  WORD_MATCH: 2,
-  WORD_BANK_TRANSLATE: 3,
+  WORD_MATCH: 3,
+  WORD_BANK_TRANSLATE: 2,
 } as const;
+
+const MIN_EXERCISES = 8;
 
 function interleave(arrays: Exercise[][]): Exercise[] {
   const result: Exercise[] = [];
@@ -36,7 +38,10 @@ function interleave(arrays: Exercise[][]): Exercise[] {
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useUserStore((s) => s.user);
-  const lessonDef = getLessonById(id, user?.current_level);
+  const addXP = useUserStore((s) => s.addXP);
+  const saveToDB = useUserStore((s) => s.saveToDB);
+  const generatedLessons = useLessonStore((s) => s.generatedLessons);
+  const lessonDef = getLessonById(id, user?.current_level, generatedLessons);
   const effectiveLevel = lessonDef.levelOverride ?? user?.current_level ?? 'B2';
 
   const { queue, currentIndex, isGenerating, generationError,
@@ -54,11 +59,11 @@ export default function LessonScreen() {
     consecutiveCorrectRef.current = 0;
 
     Promise.allSettled([
-      generateExerciseBatch('FILL_BLANK', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
-      generateExerciseBatch('MULTIPLE_CHOICE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
-      generateExerciseBatch('TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
-      generateExerciseBatch('WORD_MATCH', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
-      generateExerciseBatch('WORD_BANK_TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
+      generateExerciseBatch('FILL_BLANK', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
+      generateExerciseBatch('MULTIPLE_CHOICE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 5),
+      generateExerciseBatch('TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
+      generateExerciseBatch('WORD_MATCH', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 5),
+      generateExerciseBatch('WORD_BANK_TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
     ]).then((results) => {
       const types = ['FILL_BLANK', 'MULTIPLE_CHOICE', 'TRANSLATE', 'WORD_MATCH', 'WORD_BANK_TRANSLATE'] as const;
       const batches = results
@@ -68,8 +73,13 @@ export default function LessonScreen() {
         })
         .filter((b) => b.length > 0);
 
-      if (batches.length === 0) {
-        setGenerationError('Could not load exercises. Check your API keys and internet connection.');
+      const total = batches.reduce((sum, b) => sum + b.length, 0);
+
+      if (total < MIN_EXERCISES) {
+        setGenerationError(
+          `Could not load enough exercises (got ${total}, need ${MIN_EXERCISES}). ` +
+          'Check your API keys and internet connection.',
+        );
         return;
       }
 
@@ -97,13 +107,25 @@ export default function LessonScreen() {
     if (isCorrect) {
       const xp = gamification.awardXP('correct_answer', effectiveLevel, consecutiveCorrectRef.current);
       lessonStore.addXP(xp);
+      addXP(xp);
       consecutiveCorrectRef.current += 1;
     } else {
       consecutiveCorrectRef.current = 0;
     }
 
     if (currentIndex >= queue.length - 1) {
+      // Compute accuracy from session state (recordAnswer was already called above)
+      const finalSession = useLessonStore.getState().activeSession;
+      if (finalSession && finalSession.exercises_answered > 0) {
+        const pct = Math.round(
+          (finalSession.exercises_correct / finalSession.exercises_answered) * 100,
+        );
+        lessonStore.setLessonAccuracy(id, pct);
+      }
+
       lessonStore.completeSession();
+      lessonStore.markLessonComplete(id);
+      saveToDB().catch((err) => console.warn('[Lesson] saveToDB failed:', err));
       router.replace(`/lesson-complete/${id}`);
     } else {
       advance();

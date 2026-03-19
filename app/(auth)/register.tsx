@@ -13,13 +13,16 @@ import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function RegisterScreen() {
-  const { signUp, upgradeGuest, isGuest, isLoading, error, clearError } = useAuthStore();
+  const { signUp, upgradeGuest, signInWithGoogle, signInWithApple, isGuest, isLoading, error, clearError } = useAuthStore();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const canSubmit = displayName.trim().length > 0 && email.trim().length > 0 && password.length >= 6;
+  const anyLoading = isLoading || googleLoading || appleLoading;
 
   async function handleRegister() {
     if (!canSubmit) return;
@@ -31,6 +34,24 @@ export default function RegisterScreen() {
       }
     } catch {
       // Error is already set in the store
+    }
+  }
+
+  async function handleGoogle() {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleApple() {
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } finally {
+      setAppleLoading(false);
     }
   }
 
@@ -46,7 +67,7 @@ export default function RegisterScreen() {
       >
         <View className="flex-1 justify-center px-6 py-12">
           {/* Header */}
-          <View className="items-center mb-10">
+          <View className="items-center mb-8">
             <Text className="text-5xl mb-3">{isGuest ? '☁️' : '🌐'}</Text>
             <Text className="text-3xl font-bold text-slate-800">
               {isGuest ? 'Save your progress' : 'Create account'}
@@ -57,6 +78,57 @@ export default function RegisterScreen() {
                 : 'Start your language learning journey'}
             </Text>
           </View>
+
+          {/* ── Social sign-in ── */}
+          <View className="gap-3 mb-5">
+            {/* Google */}
+            <Pressable
+              className="flex-row items-center justify-center gap-3 border border-slate-200 rounded-xl py-3.5 bg-white active:bg-slate-50"
+              onPress={handleGoogle}
+              disabled={anyLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <Text className="text-lg">G</Text>
+              )}
+              <Text className="text-slate-700 font-semibold text-base">
+                {isGuest ? 'Save progress with Google' : 'Continue with Google'}
+              </Text>
+            </Pressable>
+
+            {/* Apple — iOS only */}
+            {Platform.OS === 'ios' ? (
+              <Pressable
+                className="flex-row items-center justify-center gap-3 bg-black rounded-xl py-3.5 active:opacity-80"
+                onPress={handleApple}
+                disabled={anyLoading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text className="text-white text-lg"></Text>
+                )}
+                <Text className="text-white font-semibold text-base">
+                  {isGuest ? 'Save progress with Apple' : 'Continue with Apple'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* Divider */}
+          <View className="flex-row items-center gap-3 mb-5">
+            <View className="flex-1 h-px bg-slate-200" />
+            <Text className="text-slate-400 text-xs font-medium">or with email</Text>
+            <View className="flex-1 h-px bg-slate-200" />
+          </View>
+
+          {/* Error */}
+          {error ? (
+            <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+              <Text className="text-red-600 text-sm">{error}</Text>
+            </View>
+          ) : null}
 
           {/* Form */}
           <View className="gap-3 mb-4">
@@ -111,13 +183,6 @@ export default function RegisterScreen() {
               />
             </View>
           </View>
-
-          {/* Error */}
-          {error ? (
-            <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-              <Text className="text-red-600 text-sm">{error}</Text>
-            </View>
-          ) : null}
 
           {/* Submit button */}
           <Pressable

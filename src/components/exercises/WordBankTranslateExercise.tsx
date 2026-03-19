@@ -8,6 +8,7 @@ import { shuffle } from '@/utils/exerciseHelpers';
 interface Props {
   content: WordBankTranslateContent;
   nativeLanguage: SupportedLanguage;
+  targetLanguage: SupportedLanguage;
   selectedAnswer: string | null;
   onAnswerChange: (answer: string | null) => void;
   isChecked: boolean;
@@ -21,6 +22,7 @@ interface Tile {
 export default function WordBankTranslateExercise({
   content,
   nativeLanguage,
+  targetLanguage,
   selectedAnswer: _selectedAnswer,
   onAnswerChange,
   isChecked,
@@ -36,7 +38,11 @@ export default function WordBankTranslateExercise({
   const [placed, setPlaced] = useState<Tile[]>([]);
   const [available, setAvailable] = useState<Tile[]>(allTiles);
 
-  const nativeLangName = LANGUAGE_NAMES[nativeLanguage];
+  // direction defaults to 'to_target': user sees native sentence, builds target sentence
+  const direction = content.direction ?? 'to_target';
+  const targetLangName = direction === 'to_target'
+    ? LANGUAGE_NAMES[targetLanguage]
+    : LANGUAGE_NAMES[nativeLanguage];
 
   function tapAvailable(tile: Tile) {
     if (isChecked) return;
@@ -56,12 +62,15 @@ export default function WordBankTranslateExercise({
     onAnswerChange(nextPlaced.length > 0 ? nextPlaced.map((t) => t.word).join(' ') : null);
   }
 
+  const sourceLangName = LANGUAGE_NAMES[content.source_language as SupportedLanguage]
+    ?? content.source_language;
+
   return (
     <View className="flex-1">
-      {/* Source sentence (target language) */}
+      {/* Source sentence */}
       <View className="bg-slate-50 rounded-2xl p-4 mb-4 border border-slate-200">
         <Text className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1">
-          {LANGUAGE_NAMES[content.source_language as SupportedLanguage] ?? content.source_language}
+          {sourceLangName}
         </Text>
         <Text className="text-slate-800 text-lg font-medium leading-7">
           {content.source_sentence}
@@ -70,7 +79,7 @@ export default function WordBankTranslateExercise({
 
       {/* Direction hint */}
       <Text className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-2">
-        Translate to {nativeLangName} →
+        Translate into {targetLangName} →
       </Text>
 
       {/* Placed tiles area */}

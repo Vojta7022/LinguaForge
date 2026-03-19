@@ -1,37 +1,122 @@
 import { View, Text, ScrollView, Pressable, Switch } from 'react-native';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useUserStore } from '@/stores/userStore';
 import { useGamificationStore } from '@/stores/gamificationStore';
-import { useProgressStore } from '@/stores/progressStore';
 import { useLessonStore } from '@/stores/lessonStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { xpToLevel } from '@/utils/xpCalculator';
 import { LANGUAGE_FLAGS, LANGUAGE_NAMES, CEFR_DESCRIPTORS } from '@/types/user';
 import type { CEFRLevel } from '@/types/user';
+import {
+  getAccuracyByType,
+  getWeeklyActivity,
+  getTotalStats,
+  type TypeAccuracy,
+  type DayActivity,
+  type TotalStats,
+} from '@/repositories/progressRepository';
 
 const CEFR_LEVELS: CEFRLevel[] = ['B1', 'B2', 'C1', 'C2'];
+
+// ─── Sub-components ───────────────────────────────────────────────────────
+
+function StatCard({ emoji, value, label }: { emoji: string; value: string; label: string }) {
+  return (
+    <View className="bg-slate-50 rounded-xl p-3 items-center border border-slate-100" style={{ minWidth: '30%', flex: 1 }}>
+      <Text className="text-xl mb-0.5">{emoji}</Text>
+      <Text className="text-base font-bold text-slate-800">{value}</Text>
+      <Text className="text-slate-400 text-xs text-center">{label}</Text>
+    </View>
+  );
+}
+
+function TypeAccuracyBar({ type, percentage, total }: TypeAccuracy) {
+  const label = type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  const barColor =
+    percentage >= 80 ? 'bg-green-500' : percentage >= 60 ? 'bg-amber-500' : 'bg-red-400';
+  return (
+    <View className="mb-3">
+      <View className="flex-row justify-between mb-1">
+        <Text className="text-slate-600 text-xs">{label}</Text>
+        <Text className="text-slate-500 text-xs">{percentage}% · {total} attempts</Text>
+      </View>
+      <View className="bg-slate-100 rounded-full h-2">
+        <View className={`${barColor} h-2 rounded-full`} style={{ width: `${Math.max(percentage, 2)}%` }} />
+      </View>
+    </View>
+  );
+}
+
+function WeeklyChart({ data }: { data: DayActivity[] }) {
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  const BAR_HEIGHT = 56;
+
+  return (
+    <View className="flex-row items-end gap-1">
+      {data.map(({ date, count }) => {
+        const barH = count > 0 ? Math.max(6, Math.round((count / maxCount) * BAR_HEIGHT)) : 4;
+        const dayLabel = new Date(date + 'T12:00:00').toLocaleDateString('en', { weekday: 'short' }).slice(0, 2);
+        const isToday = date === new Date().toISOString().slice(0, 10);
+        return (
+          <View key={date} className="flex-1 items-center gap-1">
+            {count > 0 ? (
+              <Text className="text-slate-400 text-xs">{count}</Text>
+            ) : (
+              <Text className="text-transparent text-xs">0</Text>
+            )}
+            <View style={{ height: BAR_HEIGHT }} className="w-full items-center justify-end">
+              <View
+                className={`w-5 rounded-t-md ${isToday ? 'bg-primary-500' : 'bg-primary-200'}`}
+                style={{ height: barH }}
+              />
+            </View>
+            <Text className={`text-xs ${isToday ? 'text-primary-600 font-bold' : 'text-slate-400'}`}>
+              {dayLabel}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Main screen ─────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const { signOut, isGuest } = useAuthStore();
   const user = useUserStore((s) => s.user);
   const { streak } = useGamificationStore();
-  const recentProgress = useProgressStore((s) => s.recentProgress);
   const completedLessonIds = useLessonStore((s) => s.completedLessonIds);
   const { settings, updateSetting } = useSettingsStore();
+
+  const [typeAccuracy, setTypeAccuracy] = useState<TypeAccuracy[]>([]);
+  const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
+  const [totalStats, setTotalStats] = useState<TotalStats>({ completed: 0, correct: 0, uniqueTopics: 0 });
+
+  useEffect(() => {
+    if (!user) return;
+    const uid = user.id;
+    Promise.all([
+      getAccuracyByType(uid),
+      getWeeklyActivity(uid),
+      getTotalStats(uid),
+    ]).then(([byType, weekly, totals]) => {
+      setTypeAccuracy(byType);
+      setWeeklyActivity(weekly);
+      setTotalStats(totals);
+    }).catch((err) => console.warn('[Profile] Stats load failed:', err));
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user) return null;
 
   const { level: numericLevel, progress: levelProgress } = xpToLevel(user.xp);
-
-  // Lifetime accuracy from in-memory progress (best-effort)
-  const totalAttempts = recentProgress.length;
-  const correctAttempts = recentProgress.filter((p) => p.is_correct).length;
-  const accuracyPct = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
+  const overallAccuracyPct = totalStats.completed > 0
+    ? Math.round((totalStats.correct / totalStats.completed) * 100)
+    : 0;
 
   const cefrIndex = CEFR_LEVELS.indexOf(user.current_level);
-  const cefrProgress = cefrIndex >= 0 ? (cefrIndex + 0.5) / CEFR_LEVELS.length : 0.5;
-
   const initial = user.display_name?.[0]?.toUpperCase() ?? '?';
 
   return (
@@ -81,10 +166,19 @@ export default function ProfileScreen() {
             <StatCard emoji="📚" value={`${completedLessonIds.length}`} label="Lessons done" />
             <StatCard
               emoji="✅"
-              value={totalAttempts > 0 ? `${accuracyPct}%` : '—'}
+              value={totalStats.completed > 0 ? `${overallAccuracyPct}%` : '—'}
               label="Accuracy"
             />
+            <StatCard
+              emoji="💡"
+              value={totalStats.uniqueTopics > 0 ? `${totalStats.uniqueTopics}` : '—'}
+              label="Topics learned"
+            />
+          </View>
+          <View className="flex-row gap-3 mt-3">
+            <StatCard emoji="📝" value={`${totalStats.completed}`} label="Exercises done" />
             <StatCard emoji="🎯" value={`Lv. ${numericLevel}`} label="App level" />
+            <View className="flex-1 opacity-0" />
           </View>
 
           {/* Level progress bar */}
@@ -101,6 +195,27 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Weekly activity chart */}
+        {weeklyActivity.length > 0 ? (
+          <View className="bg-white rounded-2xl p-5 border border-slate-100">
+            <Text className="text-slate-800 font-bold text-base mb-4">This Week</Text>
+            <WeeklyChart data={weeklyActivity} />
+            <Text className="text-slate-400 text-xs mt-3 text-center">
+              Exercises completed per day
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Accuracy by exercise type */}
+        {typeAccuracy.length > 0 ? (
+          <View className="bg-white rounded-2xl p-5 border border-slate-100">
+            <Text className="text-slate-800 font-bold text-base mb-4">Accuracy by Type</Text>
+            {typeAccuracy.map((t) => (
+              <TypeAccuracyBar key={t.type} {...t} />
+            ))}
+          </View>
+        ) : null}
 
         {/* CEFR level track */}
         <View className="bg-white rounded-2xl p-5 border border-slate-100">
@@ -178,15 +293,5 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
     </ScrollView>
-  );
-}
-
-function StatCard({ emoji, value, label }: { emoji: string; value: string; label: string }) {
-  return (
-    <View className="bg-slate-50 rounded-xl p-3 items-center border border-slate-100" style={{ minWidth: '30%', flex: 1 }}>
-      <Text className="text-xl mb-0.5">{emoji}</Text>
-      <Text className="text-base font-bold text-slate-800">{value}</Text>
-      <Text className="text-slate-400 text-xs text-center">{label}</Text>
-    </View>
   );
 }

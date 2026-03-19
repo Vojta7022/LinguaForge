@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Lesson, LessonSession, Unit } from '@/types/lesson';
+import type { LessonDefinition } from '@/utils/lessonData';
 
 interface LessonState {
   units: Unit[];
@@ -7,12 +8,18 @@ interface LessonState {
   activeSession: LessonSession | null;
   /** Lesson IDs completed this app session (persisted in SQLite in Phase 2) */
   completedLessonIds: string[];
+  /** Per-lesson accuracy percentage (0–100) keyed by lesson id */
+  lessonAccuracy: Record<string, number>;
+  /** AI-generated lessons appended beyond the static seed list */
+  generatedLessons: LessonDefinition[];
 
   startSession: (lessonId: string, userId: string) => void;
   recordAnswer: (isCorrect: boolean) => void;
   addXP: (amount: number) => void;
   completeSession: () => void;
   markLessonComplete: (lessonId: string) => void;
+  setLessonAccuracy: (lessonId: string, pct: number) => void;
+  addGeneratedLessons: (lessons: LessonDefinition[]) => void;
   loadUnitsAndLessons: (language: string) => Promise<void>;
 }
 
@@ -21,6 +28,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   lessons: [],
   activeSession: null,
   completedLessonIds: [],
+  lessonAccuracy: {},
+  generatedLessons: [],
 
   startSession: (lessonId, userId) =>
     set({
@@ -83,6 +92,20 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         ? state.completedLessonIds
         : [...state.completedLessonIds, lessonId],
     })),
+
+  setLessonAccuracy: (lessonId, pct) =>
+    set((state) => ({
+      lessonAccuracy: { ...state.lessonAccuracy, [lessonId]: pct },
+    })),
+
+  addGeneratedLessons: (lessons) =>
+    set((state) => {
+      const existingIds = new Set([
+        ...state.generatedLessons.map((l) => l.id),
+      ]);
+      const newOnes = lessons.filter((l) => !existingIds.has(l.id));
+      return { generatedLessons: [...state.generatedLessons, ...newOnes] };
+    }),
 
   loadUnitsAndLessons: async (_language) => {
     // TODO Phase 2: load from SQLite

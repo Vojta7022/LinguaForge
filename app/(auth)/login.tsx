@@ -13,11 +13,13 @@ import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginScreen() {
-  const { signIn, continueAsGuest, isLoading, error, clearError } = useAuthStore();
+  const { signIn, signInWithGoogle, signInWithApple, continueAsGuest, isLoading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [guestLoading, setGuestLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password) return;
@@ -32,11 +34,30 @@ export default function LoginScreen() {
     setGuestLoading(true);
     try {
       await continueAsGuest();
-      // _layout.tsx will route to onboarding once isGuest is true
     } finally {
       setGuestLoading(false);
     }
   }
+
+  async function handleGoogle() {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleApple() {
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
+  const anyLoading = isLoading || googleLoading || appleLoading || guestLoading;
 
   return (
     <KeyboardAvoidingView
@@ -58,7 +79,54 @@ export default function LoginScreen() {
             </Text>
           </View>
 
-          {/* Form */}
+          {/* ── Social sign-in ── */}
+          <View className="gap-3 mb-5">
+            {/* Google */}
+            <Pressable
+              className="flex-row items-center justify-center gap-3 border border-slate-200 rounded-xl py-3.5 bg-white active:bg-slate-50"
+              onPress={handleGoogle}
+              disabled={anyLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#4285F4" />
+              ) : (
+                <Text className="text-lg">G</Text>
+              )}
+              <Text className="text-slate-700 font-semibold text-base">Continue with Google</Text>
+            </Pressable>
+
+            {/* Apple — iOS only */}
+            {Platform.OS === 'ios' ? (
+              <Pressable
+                className="flex-row items-center justify-center gap-3 bg-black rounded-xl py-3.5 active:opacity-80"
+                onPress={handleApple}
+                disabled={anyLoading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text className="text-white text-lg"></Text>
+                )}
+                <Text className="text-white font-semibold text-base">Continue with Apple</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {/* Divider */}
+          <View className="flex-row items-center gap-3 mb-5">
+            <View className="flex-1 h-px bg-slate-200" />
+            <Text className="text-slate-400 text-xs font-medium">or continue with email</Text>
+            <View className="flex-1 h-px bg-slate-200" />
+          </View>
+
+          {/* Error */}
+          {error ? (
+            <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+              <Text className="text-red-600 text-sm">{error}</Text>
+            </View>
+          ) : null}
+
+          {/* Email form */}
           <View className="gap-3 mb-4">
             <View>
               <Text className="text-slate-600 text-sm font-medium mb-1.5">Email</Text>
@@ -95,13 +163,6 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Error */}
-          {error ? (
-            <View className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-              <Text className="text-red-600 text-sm">{error}</Text>
-            </View>
-          ) : null}
-
           {/* Sign in button */}
           <Pressable
             className={`bg-primary-600 rounded-xl py-4 items-center justify-center flex-row gap-2 mb-3
@@ -127,7 +188,7 @@ export default function LoginScreen() {
             </Text>
           </View>
 
-          {/* Divider */}
+          {/* Second divider */}
           <View className="flex-row items-center gap-3 mb-6">
             <View className="flex-1 h-px bg-slate-200" />
             <Text className="text-slate-400 text-xs">or</Text>
@@ -138,7 +199,7 @@ export default function LoginScreen() {
           <Pressable
             className="border border-slate-200 rounded-xl py-4 items-center active:bg-slate-50"
             onPress={handleGuest}
-            disabled={guestLoading}
+            disabled={anyLoading}
           >
             {guestLoading ? (
               <ActivityIndicator size="small" color="#64748B" />

@@ -1,8 +1,9 @@
 import * as Network from 'expo-network';
 import type { ExerciseType, Exercise } from '@/types/exercise';
 import type { CEFRLevel, SupportedLanguage } from '@/types/user';
+import { LANGUAGE_NAMES } from '@/types/user';
 import { DIFFICULTY_PARAMS } from './difficultyScaler';
-import { buildExercisePrompt } from './promptTemplates';
+import { buildExercisePrompt, type ExerciseFocus } from './promptTemplates';
 import { parseAIBatch, extractContent, type AIExerciseRaw } from './responseSchemas';
 import { callGroqRaw } from './groqClient';
 import { callGeminiRaw } from './geminiClient';
@@ -39,6 +40,75 @@ export function buildPromptHash(
 ): string {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return djb2(`${type}:${language}:${nativeLanguage}:${level}:${topic}:${date}`);
+}
+
+// ─── Quality validation ────────────────────────────────────────────────────
+
+/**
+ * Runs lightweight post-parse quality checks.
+ * Returns true if the exercise passes, false if it should be discarded.
+ */
+function validateExercise(raw: AIExerciseRaw): boolean {
+  switch (raw.type) {
+    case 'FILL_BLANK': {
+      // Correct answer must be in word_bank
+      const bankLower = raw.word_bank.map((w) => w.toLowerCase());
+      if (!bankLower.includes(raw.correct_answer.toLowerCase())) {
+        console.warn(
+          `[Validate] FILL_BLANK: correct_answer "${raw.correct_answer}" not in word_bank [${raw.word_bank.join(', ')}]`,
+        );
+        return false;
+      }
+      // Correct answer must not appear in the sentence text outside the blank
+      const sentenceWords = raw.sentence
+        .replace(/___+/g, ' ')
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      if (sentenceWords.includes(raw.correct_answer.toLowerCase())) {
+        console.warn(
+          `[Validate] FILL_BLANK: correct_answer "${raw.correct_answer}" already appears in sentence`,
+        );
+        return false;
+      }
+      return true;
+    }
+
+    case 'MULTIPLE_CHOICE': {
+      if (raw.correct_index < 0 || raw.correct_index >= raw.options.length) {
+        console.warn(
+          `[Validate] MULTIPLE_CHOICE: correct_index ${raw.correct_index} out of range for ${raw.options.length} options`,
+        );
+        return false;
+      }
+      return true;
+    }
+
+    case 'WORD_MATCH': {
+      const targets = raw.pairs.map((p) => p.target.toLowerCase());
+      const natives = raw.pairs.map((p) => p.native.toLowerCase());
+      if (new Set(targets).size !== targets.length || new Set(natives).size !== natives.length) {
+        console.warn('[Validate] WORD_MATCH: duplicate words detected in pairs');
+        return false;
+      }
+      return true;
+    }
+
+    case 'WORD_BANK_TRANSLATE': {
+      // correct_sentence must equal translated_words joined
+      const joined = raw.translated_words.join(' ');
+      if (joined.toLowerCase() !== raw.correct_sentence.toLowerCase()) {
+        console.warn(
+          `[Validate] WORD_BANK_TRANSLATE: correct_sentence "${raw.correct_sentence}" ≠ translated_words joined "${joined}"`,
+        );
+        return false;
+      }
+      return true;
+    }
+
+    default:
+      return true;
+  }
 }
 
 // ─── Exercise builder ─────────────────────────────────────────────────────
@@ -111,8 +181,24 @@ async function attemptProvider(
     );
   }
 
-  // If the AI ignored the type entirely, use all valid exercises rather than returning nothing
-  const toUse = matching.length > 0 ? matching : allParsed;
+  // Quality validation
+  const toValidate = matching.length > 0 ? matching : allParsed;
+  const validated = toValidate.filter(validateExercise);
+  const discardedCount = toValidate.length - validated.length;
+  if (discardedCount > 0) {
+    console.warn(`[Validate] Discarded ${discardedCount}/${toValidate.length} exercises failing quality checks`);
+  }
+
+  // If more than 50% failed validation, treat this attempt as a failure so the
+  // caller falls through to the next provider (Groq → Gemini → stale cache)
+  if (toValidate.length > 0 && validated.length < toValidate.length / 2) {
+    throw new Error(
+      `Quality check failed: ${discardedCount}/${toValidate.length} exercises discarded — trying next provider`,
+    );
+  }
+
+  // Use validated exercises; fall back to unvalidated if nothing passed
+  const toUse = validated.length > 0 ? validated : toValidate;
   return toUse.map((r) => buildExercise(r, language, nativeLanguage, level, model, hash));
 }
 
@@ -127,6 +213,8 @@ async function attemptProvider(
  *   3. Gemini (fallback)
  *   4. Stale SQLite cache (any age)
  *   5. Throws a user-friendly error
+ *
+ * @param focus  'vocabulary' | 'grammar' | 'mixed' (default 'mixed' = 70% vocab / 30% grammar)
  */
 export async function generateExerciseBatch(
   type: ExerciseType,
@@ -135,6 +223,7 @@ export async function generateExerciseBatch(
   level: CEFRLevel,
   topic: string,
   batchSize = BATCH_SIZE,
+  focus: ExerciseFocus = 'mixed',
 ): Promise<Exercise[]> {
   const hash = buildPromptHash(type, language, nativeLanguage, level, topic);
 
@@ -158,7 +247,7 @@ export async function generateExerciseBatch(
   }
 
   const { system, user } = buildExercisePrompt(
-    type, language, nativeLanguage, level, topic, batchSize,
+    type, language, nativeLanguage, level, topic, batchSize, focus,
   );
 
   // 2. Groq
@@ -200,4 +289,30 @@ export async function generateExerciseBatch(
     'Both AI providers failed and no cached exercises are available. ' +
     'Please check your API keys and try again.',
   );
+}
+
+// ─── Lesson title generation ───────────────────────────────────────────────
+
+/**
+ * Asks the AI to generate a short, creative lesson title for the given topic/level.
+ * Falls back to the topic string on any error.
+ */
+export async function generateLessonTitle(
+  topic: string,
+  level: CEFRLevel,
+  language: SupportedLanguage,
+): Promise<string> {
+  const langName = LANGUAGE_NAMES[language];
+  const system = 'You are a creative language course designer. Respond with ONLY valid JSON.';
+  const user = `Generate a short, engaging lesson title (3-6 words) for a ${level} ${langName} lesson about "${topic}". Return JSON: {"title": "..."}`;
+
+  try {
+    const raw = await callGroqRaw(system, user);
+    const cleaned = raw.trim().replace(/```(?:json)?\s*/g, '').replace(/```/g, '');
+    const parsed = JSON.parse(cleaned) as { title?: string };
+    const title = parsed.title?.trim();
+    return title && title.length > 0 ? title : topic;
+  } catch {
+    return topic;
+  }
 }

@@ -100,6 +100,7 @@ export const WordBankTranslateSchema = z.object({
   translated_words: z.array(z.string().min(1)).min(3),
   distractor_words: z.array(z.string().min(1)).min(2).max(4),
   correct_sentence: z.string().min(3),
+  direction: z.enum(['to_target', 'to_native']).optional(),
 });
 
 // ─── Metadata extension (merged flat into each exercise) ──────────────────

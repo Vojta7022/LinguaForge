@@ -3,18 +3,34 @@ import type { CEFRLevel, SupportedLanguage } from '@/types/user';
 import { LANGUAGE_NAMES } from '@/types/user';
 import { getLevelInstruction, getScoreRange } from './difficultyScaler';
 
+export type ExerciseFocus = 'vocabulary' | 'grammar' | 'mixed';
+
 export const SYSTEM_PROMPT = `You are an expert language teacher specialising in CEFR B1–C2 instruction for intermediate-to-advanced adult learners.
 
-Your exercises go well beyond beginner content: you focus on nuanced grammar, idiomatic expressions, register awareness, and complex sentence structures that simple language apps do not cover.
+Your exercises go well beyond beginner content: you focus on nuanced vocabulary, idiomatic expressions, register awareness, and real-world usage that simple language apps do not cover.
 
 Rules you must follow without exception:
 1. Respond with ONLY valid JSON. No markdown, no code fences, no explanatory text outside the JSON.
 2. Every sentence must sound like authentic, natural language — not a textbook example.
-3. Focus heavily on practical, high-frequency vocabulary appropriate for the CEFR level. Every exercise should teach or test at least one useful word or phrase that learners will actually encounter.
-4. Each exercise must test a distinct grammar point or vocabulary item — no repetition within a batch.
+3. VOCABULARY vs GRAMMAR balance: 70% of exercises must focus on VOCABULARY (word meanings, collocations, synonyms, which word fits the context). Only 30% should test grammar rules directly.
+4. Each exercise must test a distinct vocabulary item or grammar point — no repetition within a batch.
 5. Contexts must reflect real-world usage: news articles, academic papers, literature, professional communication, everyday adult conversation.
-6. grammar_hint and explanation fields must be genuinely educational — explain the rule, not just restate the answer.
-7. Avoid obscure or overly academic vocabulary unless generating C2-level content.`;
+6. grammar_hint and explanation fields must be genuinely educational — explain the rule or meaning, not just restate the answer.
+7. Avoid obscure or overly academic vocabulary unless generating C2-level content.
+8. ABSOLUTE RULE — CORRECT ANSWER IN CHOICES: The correct_answer, correct option, or correct translation tiles MUST appear exactly as provided in the word_bank, options array, or translated_words list. Before finalising your response, verify for every exercise that the correct answer is present in the choices. If it is not, fix it before responding.
+9. NATURAL TRANSLATIONS: Never translate word-by-word. Translations must sound natural to a native speaker of the target language. Use the idiomatic equivalent, not a literal gloss. Example: "Tengo hambre" → "I'm hungry" (NOT "I have hunger").`;
+
+// ─── Focus instruction helper ─────────────────────────────────────────────
+
+function focusInstruction(focus: ExerciseFocus): string {
+  if (focus === 'vocabulary') {
+    return 'FOCUS: ALL exercises must test VOCABULARY — word meanings, which word fits the context, synonym/antonym distinctions, collocations, register. Do not test grammar conjugations.';
+  }
+  if (focus === 'grammar') {
+    return 'FOCUS: ALL exercises must test GRAMMAR — verb conjugations, tenses, moods, agreement, sentence structure, word order.';
+  }
+  return 'FOCUS: Approximately 70% vocabulary (word meaning, synonyms, collocations) and 30% grammar (conjugations, tenses, moods). Prefer vocabulary.';
+}
 
 // ─── Per-type prompt builders ──────────────────────────────────────────────
 
@@ -24,6 +40,7 @@ function fillBlankPrompt(
   level: CEFRLevel,
   topic: string,
   count: number,
+  focus: ExerciseFocus,
 ): string {
   const [minScore, maxScore] = getScoreRange(level);
   return `Generate ${count} fill-in-the-blank exercises in ${lang} for a ${nativeLang}-speaking learner at CEFR level ${level}.
@@ -32,13 +49,19 @@ Level ${level} means: use ${getLevelInstruction(level)}
 
 Topic focus: ${topic}
 
-Each exercise tests a different grammar point relevant to the topic. The blank (___) replaces exactly one word or short phrase. Include exactly 4 items in word_bank: the correct answer plus 3 distractors.
+${focusInstruction(focus)}
 
-CRITICAL — distractors must be clearly wrong, not just less common alternatives:
-- If the blank tests grammar, make distractors use the wrong tense, mood, or agreement.
-- If the blank tests vocabulary, make distractors from a different semantic field.
+Prefer testing VOCABULARY in context over grammar conjugations: e.g., test whether the learner knows the right word for a concept rather than the right verb form.
+
+Each exercise has a sentence with a blank (___). Include exactly 4 items in word_bank: the correct answer plus 3 distractors.
+
+CRITICAL — distractors must be clearly wrong, not ambiguous alternatives:
+- If testing vocabulary, make distractors from a different semantic field or with a different nuance.
+- If testing grammar, make distractors use the wrong tense, mood, or agreement.
 - Each distractor must have a specific, explainable reason it doesn't fit.
 - Provide "distractor_reasons": an object mapping each distractor word to one sentence explaining why it's wrong.
+
+BLANK RULE: The correct answer word must NOT appear anywhere else in the visible sentence text (only in the blank). Before finalising, verify the answer word is not already present in the rest of the sentence.
 
 Return this exact JSON (no other text):
 {
@@ -64,11 +87,12 @@ Return this exact JSON (no other text):
 
 Requirements:
 - difficulty_score: integer between ${minScore} and ${maxScore}
-- All ${count} exercises must be on different grammar points
+- All ${count} exercises must be on different vocabulary items or grammar points
 - word_bank must always have exactly 4 items (correct answer included), randomly ordered
 - acceptable_answers may include regional or stylistic variants of the correct answer
 - distractor_reasons: include a key for EVERY distractor (not the correct answer)
-- grammar_hint: one or two sentences explaining the rule, not the answer
+- grammar_hint: one or two sentences explaining the rule or meaning, not the answer
+- VERIFY: correct_answer must be one of the items in word_bank before submitting
 - Do NOT use the example sentence above in your output`;
 }
 
@@ -78,13 +102,18 @@ function multipleChoicePrompt(
   level: CEFRLevel,
   topic: string,
   count: number,
+  focus: ExerciseFocus,
 ): string {
   const [minScore, maxScore] = getScoreRange(level);
-  return `Generate ${count} multiple-choice vocabulary and grammar exercises in ${lang} for a ${nativeLang}-speaking learner at CEFR level ${level}.
+  return `Generate ${count} multiple-choice exercises in ${lang} for a ${nativeLang}-speaking learner at CEFR level ${level}.
 
 Level ${level} means: use ${getLevelInstruction(level)}
 
 Topic focus: ${topic}
+
+${focusInstruction(focus)}
+
+Primarily test VOCABULARY: word meanings, synonym/antonym selection, which word fits the context, collocations. Only occasionally test grammar rules.
 
 Each exercise has exactly 4 options. Exactly ONE option must be unambiguously correct. The other three must be definitively wrong for a specific, explainable reason.
 
@@ -113,7 +142,7 @@ Return this exact JSON (no other text):
 
 Requirements:
 - difficulty_score: integer between ${minScore} and ${maxScore}
-- correct_index: 0, 1, 2, or 3 — vary it across exercises
+- correct_index: 0, 1, 2, or 3 — vary it across exercises (do not always put the answer at index 0)
 - options: exactly 4 distinct strings
 - why_wrong: keys must be the exact text of the 3 wrong options
 - explanation: explain why the correct answer is right and why distractors fail
@@ -136,6 +165,8 @@ Level ${level} means: use ${getLevelInstruction(level)}
 Topic focus: ${topic}
 
 Each exercise provides a sentence in ${nativeLang} that the learner must translate into ${lang}.
+
+NATURALNESS RULE: Translations must be natural and idiomatic in ${lang}, exactly as a native ${lang} speaker would say it. NEVER translate word-by-word — use the natural equivalent. Consider the specific grammar and idiom patterns of ${lang}. For example: "I'm hungry" in ${lang} is how a native speaker says it, not a literal word-for-word gloss.
 
 For "acceptable_translations": provide 3-4 accepted translations including formal/informal variants, different valid word orders, and common contractions. The first entry is the most natural answer.
 
@@ -187,7 +218,7 @@ Level ${level} means: use ${getLevelInstruction(level)}
 
 Topic focus: ${topic}
 
-Each exercise contains EXACTLY 5 word pairs. Choose high-frequency vocabulary learners at this level genuinely need. Pairs must be unambiguous — no two ${lang} words should share a ${nativeLang} translation.
+Each exercise contains EXACTLY 5 word pairs. Choose high-frequency vocabulary learners at this level genuinely need. Pairs must be unambiguous — no two ${lang} words should share a ${nativeLang} translation, and no two ${nativeLang} translations should be the same.
 
 Return this exact JSON (no other text):
 {
@@ -213,6 +244,7 @@ Requirements:
 - Each exercise must have EXACTLY 5 pairs
 - Target words: individual words or very short phrases (not full sentences)
 - Native translations: clear, unambiguous single words or short phrases
+- No duplicate target words or native translations within an exercise
 - All ${count} exercises must cover different vocabulary sets
 - Do NOT use the example pairs above in your output`;
 }
@@ -225,26 +257,34 @@ function wordBankTranslatePrompt(
   count: number,
 ): string {
   const [minScore, maxScore] = getScoreRange(level);
-  return `Generate ${count} word-bank translation exercises where learners read a sentence in ${lang} and arrange ${nativeLang} word tiles to build the translation, at CEFR level ${level}.
+  return `Generate ${count} word-bank translation exercises where learners read a sentence in ${nativeLang} and arrange ${lang} word tiles to build the translation, at CEFR level ${level}.
 
 Level ${level} means: use ${getLevelInstruction(level)}
 
 Topic focus: ${topic}
 
-"translated_words": the correct ${nativeLang} translation split into individual word tokens (keep punctuation attached to the preceding word).
-"distractor_words": 2-3 plausible but incorrect ${nativeLang} words.
-"correct_sentence": the full ${nativeLang} translation (exactly the translated_words joined with spaces).
+The learner sees a sentence in ${nativeLang} (their native language) and must arrange ${lang} (target language) tiles to translate it. This is the standard direction: native → target.
+
+NATURALNESS RULE: The ${lang} sentence in "correct_sentence" must be perfectly natural and idiomatic, exactly as a native ${lang} speaker would say it. Never produce a word-for-word gloss.
+
+"translated_words": the correct ${lang} translation split into individual word tokens (keep punctuation attached to the preceding word).
+"distractor_words": 2-3 plausible but incorrect ${lang} words that look like they could belong.
+"correct_sentence": the full ${lang} translation (exactly the translated_words joined with spaces).
+"direction": always "to_target" for this prompt.
+
+TILE RULE: Every word in correct_sentence MUST appear in translated_words. Verify this before responding.
 
 Return this exact JSON (no other text):
 {
   "exercises": [
     {
       "type": "WORD_BANK_TRANSLATE",
-      "source_sentence": "Es importante que todos comprendan las consecuencias.",
-      "source_language": "es",
-      "translated_words": ["It", "is", "important", "that", "everyone", "understands", "the", "consequences."],
-      "distractor_words": ["some", "knew", "their"],
-      "correct_sentence": "It is important that everyone understands the consequences.",
+      "source_sentence": "It is important that everyone understands the consequences.",
+      "source_language": "en",
+      "translated_words": ["Es", "importante", "que", "todos", "comprendan", "las", "consecuencias."],
+      "distractor_words": ["algunos", "conocen", "sus"],
+      "correct_sentence": "Es importante que todos comprendan las consecuencias.",
+      "direction": "to_target",
       "difficulty_score": 55,
       "grammar_point": "subjunctive comprehension",
       "vocab_topic": "${topic}"
@@ -254,10 +294,11 @@ Return this exact JSON (no other text):
 
 Requirements:
 - difficulty_score: integer between ${minScore} and ${maxScore}
-- source_language: ISO 639-1 code for ${lang}
+- source_language: ISO 639-1 code for ${nativeLang}
 - translated_words: split at word boundaries; keep punctuation attached to its word
-- distractor_words: exactly 2-3 words that look plausible but are clearly wrong in context
-- correct_sentence: exactly the joined translated_words
+- distractor_words: exactly 2-3 ${lang} words that look plausible but are clearly wrong in context
+- correct_sentence: MUST equal translated_words joined with spaces — verify this
+- direction: "to_target"
 - All ${count} exercises must use different source sentences
 - Do NOT use the example above in your output`;
 }
@@ -271,6 +312,7 @@ export function buildExercisePrompt(
   level: CEFRLevel,
   topic: string,
   count = 10,
+  focus: ExerciseFocus = 'mixed',
 ): { system: string; user: string } {
   const lang = LANGUAGE_NAMES[language];
   const nativeLang = LANGUAGE_NAMES[nativeLanguage];
@@ -278,10 +320,10 @@ export function buildExercisePrompt(
   let user: string;
   switch (type) {
     case 'FILL_BLANK':
-      user = fillBlankPrompt(lang, nativeLang, level, topic, count);
+      user = fillBlankPrompt(lang, nativeLang, level, topic, count, focus);
       break;
     case 'MULTIPLE_CHOICE':
-      user = multipleChoicePrompt(lang, nativeLang, level, topic, count);
+      user = multipleChoicePrompt(lang, nativeLang, level, topic, count, focus);
       break;
     case 'TRANSLATE':
       user = translatePrompt(lang, nativeLang, level, topic, count);

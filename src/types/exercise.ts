@@ -110,15 +110,21 @@ export interface WordMatchContent {
 
 export interface WordBankTranslateContent {
   type: 'WORD_BANK_TRANSLATE';
-  /** Sentence shown to the user (in the target language they are learning) */
+  /**
+   * Sentence shown to the user.
+   * - 'to_target' (default): native-language sentence — user builds the target-language translation.
+   * - 'to_native': target-language sentence — user builds the native-language translation.
+   */
   source_sentence: string;
   source_language: SupportedLanguage;
-  /** Correct translation words in the right order (native language) */
+  /** Correct word tiles in the right order (the language the user must BUILD). */
   translated_words: string[];
-  /** 2–3 extra tiles that don't belong in the translation */
+  /** 2–3 plausible distractor tiles. */
   distractor_words: string[];
-  /** Full correct native-language sentence (= translated_words joined) */
+  /** Full correct sentence (= translated_words joined with spaces). */
   correct_sentence: string;
+  /** Translation direction. 'to_target' = native → target (default, 70%). 'to_native' = target → native (30%). */
+  direction?: 'to_target' | 'to_native';
 }
 
 export type ExerciseContent =

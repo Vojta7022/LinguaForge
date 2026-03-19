@@ -170,6 +170,7 @@ export default function ExerciseShell({
             <WordBankTranslateExercise
               content={exercise.content as WordBankTranslateContent}
               nativeLanguage={nativeLanguage}
+              targetLanguage={targetLanguage}
               selectedAnswer={selectedAnswer}
               onAnswerChange={setSelectedAnswer}
               isChecked={isChecked}
