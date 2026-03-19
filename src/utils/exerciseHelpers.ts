@@ -2,6 +2,7 @@ import type {
   Exercise,
   FillBlankContent,
   MultipleChoiceContent,
+  SentenceReorderContent,
   TranslateContent,
   WordBankTranslateContent,
 } from '@/types/exercise';
@@ -153,6 +154,20 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
         correctAnswerDisplay: tr.reference_translation,
         explanation: tr.context_note ?? '',
         altAnswers: alts.length > 0 ? alts : undefined,
+      };
+    }
+
+    case 'SENTENCE_REORDER': {
+      const sr = c as SentenceReorderContent;
+      // Tiles are rendered without punctuation, so compare without all punctuation
+      const normFull = (s: string) =>
+        s.trim().toLowerCase().replace(/[.,!?;:'"()¡¿]/g, '').replace(/\s+/g, ' ').trim();
+      const correct = normFull(answer) === normFull(sr.correct_sentence);
+      return {
+        isCorrect: correct,
+        correctAnswerDisplay: sr.correct_sentence,
+        explanation: sr.grammar_note ?? '',
+        isClose: false,
       };
     }
 

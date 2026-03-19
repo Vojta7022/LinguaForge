@@ -10,6 +10,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useEffect, useCallback, useRef } from 'react';
 import { useUserStore } from '@/stores/userStore';
 import { useGamificationStore } from '@/stores/gamificationStore';
+import { getUser } from '@/repositories/userRepository';
 import { useLessonStore } from '@/stores/lessonStore';
 import { LESSONS, generateMoreLessons } from '@/utils/lessonData';
 import { generateLessonTitle } from '@/services/ai/exerciseGenerator';
@@ -113,7 +114,7 @@ function LessonNode({
 
 export default function HomeScreen() {
   const user = useUserStore((s) => s.user);
-  const loadFromDB = useUserStore((s) => s.loadFromDB);
+  const setUser = useUserStore((s) => s.setUser);
   const initFromUser = useGamificationStore((s) => s.initFromUser);
   const dailyGoal = useGamificationStore((s) => s.dailyGoal);
   const completedIds = useLessonStore((s) => s.completedLessonIds);
@@ -132,11 +133,13 @@ export default function HomeScreen() {
     useCallback(() => {
       const uid = userIdRef.current;
       if (!uid) return;
-      loadFromDB(uid).then(() => {
-        const refreshed = useUserStore.getState().user;
-        if (refreshed) initFromUser(refreshed);
+      getUser(uid).then((freshUser) => {
+        if (freshUser) {
+          setUser(freshUser);
+          initFromUser(freshUser);
+        }
       }).catch(() => {/* ignore */});
-    }, [loadFromDB, initFromUser]),
+    }, [setUser, initFromUser]),
   );
 
   // Prefetch 3 new lessons when user reaches the second-to-last available lesson

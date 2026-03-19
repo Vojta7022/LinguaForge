@@ -28,6 +28,9 @@ export interface FillBlankContent {
 
 export interface SentenceReorderContent {
   type: 'SENTENCE_REORDER';
+  /** Complete sentence in the user's native language, shown as context */
+  native_sentence?: string;
+  /** Target-language words to arrange (rendered without punctuation as tiles) */
   words: string[];
   correct_sentence: string;
   grammar_note?: string;

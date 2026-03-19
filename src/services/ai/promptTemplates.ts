@@ -3,6 +3,27 @@ import type { CEFRLevel, SupportedLanguage } from '@/types/user';
 import { LANGUAGE_NAMES } from '@/types/user';
 import { getLevelInstruction, getScoreRange } from './difficultyScaler';
 
+// ─── Language-specific addendum ────────────────────────────────────────────
+
+/**
+ * Returns language-specific grammar and usage rules to append to the system
+ * prompt. Add a new entry here to support additional languages.
+ */
+function languageSpecificAddendum(language: SupportedLanguage): string {
+  const rules: Partial<Record<SupportedLanguage, string>> = {
+    cs: `
+CZECH-SPECIFIC RULES (apply to every exercise):
+- Czech has 7 grammatical cases (nominative, genitive, dative, accusative, vocative, locative, instrumental). Always use the case required by the sentence structure.
+- In vocabulary lists (word_bank, options, WORD_MATCH pairs) always list nouns/adjectives in NOMINATIVE singular unless the exercise specifically tests a different case.
+- Czech does NOT use articles. Never include or expect "a", "an", or "the" equivalents.
+- Verbal aspect is critical: use imperfective for ongoing/habitual actions, perfective for completed actions. The correct aspect must match the context (e.g. "psát" vs "napsat", "dělat" vs "udělat").
+- Czech word order is flexible and communicatively driven (topic-comment structure). In TRANSLATE exercises, accept multiple valid word orders in acceptable_translations.
+- Watch for false friends with Slovak: while many words are shared, some have subtly different register or frequency. Never produce Slovak-specific forms (e.g. use "jít" not "ísť", "mít" not "mať", "být" not "byť").
+- Beware of words that are false friends with English: "eventuálně" = possibly (not "eventually"), "aktuálně" = currently (not "actually"), "ordinální" = ordinal (not "ordinary").`,
+  };
+  return rules[language] ?? '';
+}
+
 export type ExerciseFocus = 'vocabulary' | 'grammar' | 'mixed';
 
 export const SYSTEM_PROMPT = `You are an expert language teacher specialising in CEFR B1–C2 instruction for intermediate-to-advanced adult learners.
@@ -218,7 +239,14 @@ Level ${level} means: use ${getLevelInstruction(level)}
 
 Topic focus: ${topic}
 
-Each exercise contains EXACTLY 5 word pairs. Choose high-frequency vocabulary learners at this level genuinely need. Pairs must be unambiguous — no two ${lang} words should share a ${nativeLang} translation, and no two ${nativeLang} translations should be the same.
+Each exercise contains EXACTLY 5 word pairs. The pairs MUST satisfy ALL of the following:
+
+VOCABULARY RULES — apply before finalising:
+1. UNAMBIGUOUS MATCH: Each ${lang} word must have one clear primary ${nativeLang} translation. Avoid polysemous words (words with multiple common meanings) unless the context pins down the meaning.
+2. DISTINCT SEMANTIC FIELDS: The 5 words within one exercise must come from different semantic sub-areas of the topic. Do NOT cluster synonyms or near-synonyms together (e.g. do not include both "imprescindible" and "esencial" in the same exercise).
+3. NO SHARED TRANSLATIONS: No two ${lang} words may share the same ${nativeLang} translation or near-synonym translation.
+4. HIGH-FREQUENCY: Choose words learners genuinely encounter at ${level} level — not obscure specialised terms.
+5. VERIFY COUNT: Count to confirm there are exactly 5 pairs before responding.
 
 Return this exact JSON (no other text):
 {
@@ -241,9 +269,9 @@ Return this exact JSON (no other text):
 
 Requirements:
 - difficulty_score: integer between ${minScore} and ${maxScore}
-- Each exercise must have EXACTLY 5 pairs
-- Target words: individual words or very short phrases (not full sentences)
-- Native translations: clear, unambiguous single words or short phrases
+- Each exercise MUST have EXACTLY 5 pairs — not 4, not 6
+- Target: individual words or very short phrases (not full sentences)
+- Native: single clear translation — one word or short phrase
 - No duplicate target words or native translations within an exercise
 - All ${count} exercises must cover different vocabulary sets
 - Do NOT use the example pairs above in your output`;
@@ -303,6 +331,54 @@ Requirements:
 - Do NOT use the example above in your output`;
 }
 
+function sentenceReorderPrompt(
+  lang: string,
+  nativeLang: string,
+  level: CEFRLevel,
+  topic: string,
+  count: number,
+): string {
+  const [minScore, maxScore] = getScoreRange(level);
+  return `Generate ${count} sentence-reorder exercises for a ${nativeLang}-speaking learner at CEFR level ${level}.
+
+Level ${level} means: use ${getLevelInstruction(level)}
+
+Topic focus: ${topic}
+
+The learner sees "native_sentence" in ${nativeLang} (their native language) as context, and must arrange scrambled ${lang} word tiles to produce the correct ${lang} translation.
+
+"native_sentence": the complete sentence in ${nativeLang}.
+"words": the correct ${lang} translation split into individual tokens, then SHUFFLED (do NOT list them in the correct order).
+"correct_sentence": the ${lang} sentence with words in the correct order (= words joined correctly with spaces).
+
+NATURALNESS RULE: correct_sentence must sound perfectly natural in ${lang}, not a word-for-word gloss.
+ORDER RULE: The "words" array MUST be randomly shuffled — never match the correct order.
+PUNCTUATION RULE: Keep punctuation attached to the word it follows (e.g. "generaciones." not "generaciones" + ".").
+
+Return this exact JSON (no other text):
+{
+  "exercises": [
+    {
+      "type": "SENTENCE_REORDER",
+      "native_sentence": "It is essential that we protect the environment for future generations.",
+      "words": ["generaciones.", "el", "que", "medioambiente", "futuras", "esencial", "Es", "protejamos", "para"],
+      "correct_sentence": "Es esencial que protejamos el medioambiente para futuras generaciones.",
+      "grammar_note": "The present subjunctive 'protejamos' follows the nominal trigger 'Es esencial que'.",
+      "difficulty_score": 62,
+      "grammar_point": "present subjunctive — nominal clause",
+      "vocab_topic": "${topic}"
+    }
+  ]
+}
+
+Requirements:
+- difficulty_score: integer between ${minScore} and ${maxScore}
+- words: MUST be shuffled — never in the correct sentence order
+- correct_sentence MUST equal words (in the right order) joined with spaces
+- All ${count} exercises must use different sentence constructions
+- Do NOT use the example above in your output`;
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export function buildExercisePrompt(
@@ -334,9 +410,12 @@ export function buildExercisePrompt(
     case 'WORD_BANK_TRANSLATE':
       user = wordBankTranslatePrompt(lang, nativeLang, level, topic, count);
       break;
+    case 'SENTENCE_REORDER':
+      user = sentenceReorderPrompt(lang, nativeLang, level, topic, count);
+      break;
     default:
       user = `Generate 6 ${type} exercises. Return JSON: { "exercises": [] }`;
   }
 
-  return { system: SYSTEM_PROMPT, user };
+  return { system: SYSTEM_PROMPT + languageSpecificAddendum(language), user };
 }

@@ -13,13 +13,14 @@ import { shuffle } from '@/utils/exerciseHelpers';
 import { getLessonById } from '@/utils/lessonData';
 import type { Exercise } from '@/types/exercise';
 
-// FIX 4: 15 exercises per lesson
+// 15 exercises per lesson across 6 types
 const PER_TYPE = {
-  FILL_BLANK: 5,
+  FILL_BLANK: 4,
   MULTIPLE_CHOICE: 3,
   TRANSLATE: 2,
-  WORD_MATCH: 3,
+  WORD_MATCH: 2,
   WORD_BANK_TRANSLATE: 2,
+  SENTENCE_REORDER: 2,
 } as const;
 
 const MIN_EXERCISES = 8;
@@ -62,10 +63,11 @@ export default function LessonScreen() {
       generateExerciseBatch('FILL_BLANK', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
       generateExerciseBatch('MULTIPLE_CHOICE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 5),
       generateExerciseBatch('TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
-      generateExerciseBatch('WORD_MATCH', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 5),
+      generateExerciseBatch('WORD_MATCH', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
       generateExerciseBatch('WORD_BANK_TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
+      generateExerciseBatch('SENTENCE_REORDER', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 4),
     ]).then((results) => {
-      const types = ['FILL_BLANK', 'MULTIPLE_CHOICE', 'TRANSLATE', 'WORD_MATCH', 'WORD_BANK_TRANSLATE'] as const;
+      const types = ['FILL_BLANK', 'MULTIPLE_CHOICE', 'TRANSLATE', 'WORD_MATCH', 'WORD_BANK_TRANSLATE', 'SENTENCE_REORDER'] as const;
       const batches = results
         .map((r, i) => {
           if (r.status !== 'fulfilled') return [];

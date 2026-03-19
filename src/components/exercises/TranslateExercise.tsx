@@ -10,8 +10,6 @@ interface Props {
   selectedAnswer: string | null;
   onAnswerChange: (answer: string | null) => void;
   isChecked: boolean;
-  isCorrect: boolean;
-  isClose: boolean;
 }
 
 export default function TranslateExercise({
@@ -20,8 +18,6 @@ export default function TranslateExercise({
   selectedAnswer,
   onAnswerChange,
   isChecked,
-  isCorrect,
-  isClose,
 }: Props) {
   const nativeLangName =
     LANGUAGE_NAMES[content.source_language as SupportedLanguage] ?? content.source_language;
@@ -31,11 +27,7 @@ export default function TranslateExercise({
     if (isChecked) Keyboard.dismiss();
   }, [isChecked]);
 
-  const borderColor = isChecked
-    ? isCorrect
-      ? 'border-green-400 bg-green-50'
-      : 'border-red-400 bg-red-50'
-    : 'border-slate-200 bg-white';
+  const borderColor = isChecked ? 'border-slate-300 bg-slate-50' : 'border-slate-200 bg-white';
 
   return (
     <View className="flex-1">
@@ -76,27 +68,7 @@ export default function TranslateExercise({
         </Text>
       ) : null}
 
-      {/* Post-check: reference + alternatives */}
-      {isChecked ? (
-        <View className="mt-4 rounded-2xl p-4 border bg-slate-50 border-slate-200">
-          <Text className="text-slate-500 text-xs font-semibold mb-1">
-            {isClose ? '✨ Also acceptable — reference answer:' : 'Reference answer:'}
-          </Text>
-          <Text className="text-slate-800 text-sm font-medium leading-5 mb-2">
-            {content.reference_translation}
-          </Text>
-          {content.acceptable_translations && content.acceptable_translations.length > 0 ? (
-            <>
-              <Text className="text-slate-400 text-xs font-semibold mt-1 mb-1">
-                Also accepted:
-              </Text>
-              {content.acceptable_translations.map((alt, i) => (
-                <Text key={i} className="text-slate-600 text-xs leading-5">• {alt}</Text>
-              ))}
-            </>
-          ) : null}
-        </View>
-      ) : null}
+      {/* Reference answer and alternatives are shown in the feedback banner */}
     </View>
   );
 }

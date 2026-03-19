@@ -15,6 +15,7 @@ export const FillBlankSchema = z.object({
 
 export const SentenceReorderSchema = z.object({
   type: z.literal('SENTENCE_REORDER'),
+  native_sentence: z.string().optional(),
   words: z.array(z.string()).min(3),
   correct_sentence: z.string().min(5),
   grammar_note: z.string().optional(),

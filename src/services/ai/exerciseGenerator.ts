@@ -85,6 +85,10 @@ function validateExercise(raw: AIExerciseRaw): boolean {
     }
 
     case 'WORD_MATCH': {
+      if (raw.pairs.length !== 5) {
+        console.warn(`[Validate] WORD_MATCH: expected exactly 5 pairs, got ${raw.pairs.length}`);
+        return false;
+      }
       const targets = raw.pairs.map((p) => p.target.toLowerCase());
       const natives = raw.pairs.map((p) => p.native.toLowerCase());
       if (new Set(targets).size !== targets.length || new Set(natives).size !== natives.length) {
@@ -289,6 +293,55 @@ export async function generateExerciseBatch(
     'Both AI providers failed and no cached exercises are available. ' +
     'Please check your API keys and try again.',
   );
+}
+
+// ─── On-the-fly explanation ────────────────────────────────────────────────
+
+/**
+ * Asks Groq to explain (in the learner's native language) why the chosen
+ * wrong answer was incorrect. Used when distractor_reasons / why_wrong is absent.
+ * Returns an empty string on any failure.
+ */
+export async function generateExplanation(
+  exercise: { type: string; content: Record<string, unknown> },
+  wrongAnswer: string,
+  nativeLang: SupportedLanguage,
+): Promise<string> {
+  const nativeLangName = LANGUAGE_NAMES[nativeLang];
+  const c = exercise.content;
+  let context: string;
+
+  if (exercise.type === 'FILL_BLANK') {
+    context =
+      `Sentence: "${c.sentence as string}"\n` +
+      `Correct answer: "${c.correct_answer as string}"\n` +
+      `Student's wrong answer: "${wrongAnswer}"`;
+  } else if (exercise.type === 'MULTIPLE_CHOICE') {
+    const options = c.options as string[];
+    const correctIdx = c.correct_index as number;
+    context =
+      `Question: "${c.question as string}"\n` +
+      `Correct answer: "${options[correctIdx]}"\n` +
+      `Student's wrong answer: "${wrongAnswer}"`;
+  } else {
+    return '';
+  }
+
+  const system = 'You are a helpful language teacher. Respond with ONLY valid JSON.';
+  const user =
+    `${context}\n` +
+    `Explain in ${nativeLangName} in 1-2 sentences why "${wrongAnswer}" is wrong ` +
+    `and why the correct answer is right. Be specific and educational. ` +
+    `Return JSON: {"explanation": "..."}`;
+
+  try {
+    const raw = await callGroqRaw(system, user);
+    const cleaned = raw.trim().replace(/```(?:json)?\s*/g, '').replace(/```/g, '');
+    const parsed = JSON.parse(cleaned) as { explanation?: string };
+    return parsed.explanation?.trim() ?? '';
+  } catch {
+    return '';
+  }
 }
 
 // ─── Lesson title generation ───────────────────────────────────────────────
