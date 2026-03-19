@@ -1,6 +1,14 @@
 import { getDB } from '@/services/database/db';
 import type { Exercise } from '@/types/exercise';
 
+function parseRow(row: Record<string, unknown>): Exercise {
+  return {
+    ...(row as unknown as Exercise),
+    content: JSON.parse(row.content as string),
+    is_cached: Boolean(row.is_cached),
+  };
+}
+
 export async function saveExercises(exercises: Exercise[]): Promise<void> {
   const db = await getDB();
   for (const ex of exercises) {
@@ -24,10 +32,25 @@ export async function getExercise(id: string): Promise<Exercise | null> {
     'SELECT * FROM exercises WHERE id = ?', [id],
   );
   if (!row) return null;
-  return { ...row, content: JSON.parse(row.content as string) } as Exercise;
+  return parseRow(row);
+}
+
+export async function getExercisesByIds(ids: string[]): Promise<Exercise[]> {
+  if (ids.length === 0) return [];
+  const db = await getDB();
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM exercises WHERE id IN (${placeholders})`,
+    ids,
+  );
+  return rows.map(parseRow);
 }
 
 export async function getCachedByHash(promptHash: string): Promise<Exercise[]> {
-  // TODO Phase 1: join with exercise_cache_meta
-  return [];
+  const db = await getDB();
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM exercises WHERE prompt_hash = ?',
+    [promptHash],
+  );
+  return rows.map(parseRow);
 }

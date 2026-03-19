@@ -21,6 +21,27 @@ export async function upsertUser(user: User): Promise<void> {
   );
 }
 
+/**
+ * Re-keys all user data from a guest UUID to a new Supabase user ID.
+ * Called after a guest signs up to preserve all local progress.
+ */
+export async function migrateGuestUser(oldId: string, newId: string, newEmail: string): Promise<void> {
+  const db = await getDB();
+  const now = new Date().toISOString();
+  await db.runAsync(
+    'UPDATE users SET id = ?, email = ?, updated_at = ? WHERE id = ?',
+    [newId, newEmail, now, oldId],
+  );
+  await db.runAsync(
+    'UPDATE user_progress SET user_id = ? WHERE user_id = ?',
+    [newId, oldId],
+  );
+  await db.runAsync(
+    'UPDATE spaced_repetition SET user_id = ? WHERE user_id = ?',
+    [newId, oldId],
+  );
+}
+
 export async function updateXP(id: string, xp: number): Promise<void> {
   const db = await getDB();
   await db.runAsync(

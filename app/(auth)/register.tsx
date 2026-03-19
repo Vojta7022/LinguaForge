@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function RegisterScreen() {
-  const { signUp, isLoading, error, clearError } = useAuthStore();
+  const { signUp, upgradeGuest, isGuest, isLoading, error, clearError } = useAuthStore();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,9 +24,13 @@ export default function RegisterScreen() {
   async function handleRegister() {
     if (!canSubmit) return;
     try {
-      await signUp(email.trim().toLowerCase(), password, displayName.trim());
+      if (isGuest) {
+        await upgradeGuest(email.trim().toLowerCase(), password, displayName.trim());
+      } else {
+        await signUp(email.trim().toLowerCase(), password, displayName.trim());
+      }
     } catch {
-      // Error is already set in the store — nothing more to do here
+      // Error is already set in the store
     }
   }
 
@@ -43,10 +47,14 @@ export default function RegisterScreen() {
         <View className="flex-1 justify-center px-6 py-12">
           {/* Header */}
           <View className="items-center mb-10">
-            <Text className="text-5xl mb-3">🌐</Text>
-            <Text className="text-3xl font-bold text-slate-800">Create account</Text>
+            <Text className="text-5xl mb-3">{isGuest ? '☁️' : '🌐'}</Text>
+            <Text className="text-3xl font-bold text-slate-800">
+              {isGuest ? 'Save your progress' : 'Create account'}
+            </Text>
             <Text className="text-slate-500 text-base mt-2 text-center">
-              Start your language learning journey
+              {isGuest
+                ? 'Your XP, streak, and progress will be synced across devices'
+                : 'Start your language learning journey'}
             </Text>
           </View>
 
@@ -111,7 +119,7 @@ export default function RegisterScreen() {
             </View>
           ) : null}
 
-          {/* Sign up button */}
+          {/* Submit button */}
           <Pressable
             className={`bg-primary-600 rounded-xl py-4 items-center justify-center flex-row gap-2 mb-6
               ${isLoading || !canSubmit ? 'opacity-60' : 'active:opacity-80'}`}
@@ -122,19 +130,23 @@ export default function RegisterScreen() {
               <ActivityIndicator size="small" color="white" />
             ) : null}
             <Text className="text-white font-bold text-base">
-              {isLoading ? 'Creating account…' : 'Create Account'}
+              {isLoading
+                ? isGuest ? 'Saving…' : 'Creating account…'
+                : isGuest ? 'Save & Sync Progress' : 'Create Account'}
             </Text>
           </Pressable>
 
-          {/* Sign in link */}
-          <View className="items-center">
-            <Text className="text-slate-500 text-sm">
-              Already have an account?{' '}
-              <Link href="/(auth)/login">
-                <Text className="text-primary-600 font-semibold">Sign in</Text>
-              </Link>
-            </Text>
-          </View>
+          {/* Sign in link — only for non-guests */}
+          {!isGuest ? (
+            <View className="items-center">
+              <Text className="text-slate-500 text-sm">
+                Already have an account?{' '}
+                <Link href="/(auth)/login">
+                  <Text className="text-primary-600 font-semibold">Sign in</Text>
+                </Link>
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

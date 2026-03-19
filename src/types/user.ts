@@ -3,7 +3,7 @@ export type CEFRLevel = 'B1' | 'B2' | 'C1' | 'C2';
 export type SupportedLanguage =
   | 'en' | 'es' | 'fr' | 'de' | 'it' | 'pt'
   | 'ja' | 'zh' | 'ko' | 'ru' | 'ar'
-  | 'nl' | 'pl' | 'tr' | 'sv' | 'da' | 'no';
+  | 'cs' | 'nl' | 'pl' | 'tr' | 'sv' | 'da' | 'no';
 
 export interface User {
   id: string;
@@ -41,6 +41,7 @@ export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   ko: 'Korean',
   ru: 'Russian',
   ar: 'Arabic',
+  cs: 'Czech',
   nl: 'Dutch',
   pl: 'Polish',
   tr: 'Turkish',
@@ -61,6 +62,7 @@ export const LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
   ko: '🇰🇷',
   ru: '🇷🇺',
   ar: '🇸🇦',
+  cs: '🇨🇿',
   nl: '🇳🇱',
   pl: '🇵🇱',
   tr: '🇹🇷',

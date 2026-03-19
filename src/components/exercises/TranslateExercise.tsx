@@ -1,11 +1,103 @@
-import { View, Text } from 'react-native';
+import { View, Text, TextInput, Keyboard } from 'react-native';
+import { useEffect } from 'react';
+import type { TranslateContent } from '@/types/exercise';
+import type { SupportedLanguage } from '@/types/user';
+import { LANGUAGE_NAMES } from '@/types/user';
 
-// TODO Phase 1: implement TranslateExercise
+interface Props {
+  content: TranslateContent;
+  targetLanguage: SupportedLanguage;
+  selectedAnswer: string | null;
+  onAnswerChange: (answer: string | null) => void;
+  isChecked: boolean;
+  isCorrect: boolean;
+  isClose: boolean;
+}
 
-export default function TranslateExercise() {
+export default function TranslateExercise({
+  content,
+  targetLanguage,
+  selectedAnswer,
+  onAnswerChange,
+  isChecked,
+  isCorrect,
+  isClose,
+}: Props) {
+  const nativeLangName =
+    LANGUAGE_NAMES[content.source_language as SupportedLanguage] ?? content.source_language;
+  const targetLangName = LANGUAGE_NAMES[targetLanguage];
+
+  useEffect(() => {
+    if (isChecked) Keyboard.dismiss();
+  }, [isChecked]);
+
   return (
-    <View className="flex-1 items-center justify-center">
-      <Text className="text-slate-400 text-base">[TranslateExercise — Phase 1]</Text>
+    <View className="flex-1">
+      {/* Direction label */}
+      <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
+        {nativeLangName} → {targetLangName}
+      </Text>
+
+      {/* Source text */}
+      <View className="bg-slate-50 rounded-2xl p-4 mb-5 border border-slate-200">
+        <Text className="text-slate-800 text-lg font-medium leading-7">
+          {content.source_text}
+        </Text>
+        {content.context_note && !isChecked ? (
+          <Text className="text-slate-400 text-xs italic mt-2">
+            💡 {content.context_note}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Text input */}
+      <TextInput
+        className={`border-2 rounded-2xl px-4 py-3 text-base text-slate-800 min-h-[100px]
+          ${isChecked
+            ? isCorrect
+              ? 'border-green-400 bg-green-50'
+              : isClose
+              ? 'border-amber-400 bg-amber-50'
+              : 'border-red-400 bg-red-50'
+            : 'border-slate-200 bg-white'
+          }`}
+        placeholder={`Write in ${targetLangName}…`}
+        placeholderTextColor="#94A3B8"
+        value={selectedAnswer ?? ''}
+        onChangeText={(t) => onAnswerChange(t.length > 0 ? t : null)}
+        multiline
+        textAlignVertical="top"
+        autoCorrect={false}
+        autoCapitalize="sentences"
+        editable={!isChecked}
+      />
+
+      {/* Character count */}
+      {!isChecked && (selectedAnswer?.length ?? 0) > 0 ? (
+        <Text className="text-slate-400 text-xs text-right mt-1">
+          {selectedAnswer?.length} chars
+        </Text>
+      ) : null}
+
+      {/* Post-check: reference translation */}
+      {isChecked ? (
+        <View className={`mt-4 rounded-2xl p-4 border
+          ${isClose ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}
+        >
+          {isClose ? (
+            <Text className="text-amber-700 text-xs font-semibold mb-1">
+              ✨ Very close! Reference answer:
+            </Text>
+          ) : (
+            <Text className="text-slate-500 text-xs font-semibold mb-1">
+              Reference answer:
+            </Text>
+          )}
+          <Text className="text-slate-800 text-sm font-medium leading-5">
+            {content.reference_translation}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }

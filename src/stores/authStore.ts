@@ -1,30 +1,20 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
+import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/services/auth/supabaseClient';
-import { getUser } from '@/repositories/userRepository';
+import { getUser, migrateGuestUser } from '@/repositories/userRepository';
 
-interface AuthState {
-  session: Session | null;
-  isOnboarded: boolean;
-  isInitialized: boolean;
-  isLoading: boolean;
-  error: string | null;
+const GUEST_ID_KEY = 'lf_guest_id';
 
-  /**
-   * Call once on app launch (in _layout.tsx).
-   * Restores session from SecureStore, checks SQLite for onboarding status,
-   * and subscribes to future auth events.
-   */
-  initialize: () => Promise<void>;
+// Prevents onAuthStateChange from overwriting state mid-upgrade
+let isUpgrading = false;
 
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
-  signOut: () => Promise<void>;
-
-  /** Called by ready.tsx after user profile is saved to SQLite */
-  setOnboarded: () => void;
-
-  clearError: () => void;
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 async function checkOnboarded(userId: string): Promise<boolean> {
@@ -38,7 +28,6 @@ async function checkOnboarded(userId: string): Promise<boolean> {
 
 function parseError(err: unknown): string {
   if (err instanceof Error) {
-    // Clean up common Supabase error messages for display
     const msg = err.message;
     if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.';
     if (msg.includes('Email not confirmed')) return 'Please verify your email before signing in.';
@@ -49,31 +38,66 @@ function parseError(err: unknown): string {
   return 'An unexpected error occurred. Please try again.';
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+interface AuthState {
+  session: Session | null;
+  isGuest: boolean;
+  guestId: string | null;
+  isOnboarded: boolean;
+  isInitialized: boolean;
+  isLoading: boolean;
+  error: string | null;
+
+  initialize: () => Promise<void>;
+  continueAsGuest: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  /** Upgrade a guest account to a full Supabase account, migrating all local data. */
+  upgradeGuest: (email: string, password: string, displayName: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  setOnboarded: () => void;
+  clearError: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
+  isGuest: false,
+  guestId: null,
   isOnboarded: false,
   isInitialized: false,
   isLoading: false,
   error: null,
 
   initialize: async () => {
-    // Subscribe to future auth events (sign in, sign out, token refresh)
     supabase.auth.onAuthStateChange(async (event, session) => {
-      // INITIAL_SESSION is handled below via getSession() — skip it here
-      // to avoid a redundant SQLite lookup on startup
       if (event === 'INITIAL_SESSION') return;
-
+      if (isUpgrading) return;
       const isOnboarded = session ? await checkOnboarded(session.user.id) : false;
-      set({ session, isOnboarded });
+      set({ session, isOnboarded, isGuest: false, guestId: null });
     });
 
-    // Get the persisted session from SecureStore
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
 
-    const isOnboarded = session ? await checkOnboarded(session.user.id) : false;
-    set({ session, isOnboarded, isInitialized: true });
+    if (session) {
+      const isOnboarded = await checkOnboarded(session.user.id);
+      set({ session, isOnboarded, isInitialized: true });
+      return;
+    }
+
+    // No Supabase session — check for persisted guest
+    const storedGuestId = await SecureStore.getItemAsync(GUEST_ID_KEY);
+    if (storedGuestId) {
+      const isOnboarded = await checkOnboarded(storedGuestId);
+      set({ isGuest: true, guestId: storedGuestId, isOnboarded, isInitialized: true });
+      return;
+    }
+
+    set({ isInitialized: true });
+  },
+
+  continueAsGuest: async () => {
+    const id = generateUUID();
+    await SecureStore.setItemAsync(GUEST_ID_KEY, id);
+    set({ isGuest: true, guestId: id, isOnboarded: false, error: null });
   },
 
   signIn: async (email, password) => {
@@ -81,14 +105,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      const isOnboarded = data.session
-        ? await checkOnboarded(data.session.user.id)
-        : false;
-      set({ session: data.session, isOnboarded });
+      const isOnboarded = data.session ? await checkOnboarded(data.session.user.id) : false;
+      set({ session: data.session, isOnboarded, isGuest: false, guestId: null });
     } catch (err) {
       const error = parseError(err);
       set({ error });
-      throw new Error(error); // re-throw so the form knows it failed
+      throw new Error(error);
     } finally {
       set({ isLoading: false });
     }
@@ -100,12 +122,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { display_name: displayName.trim() },
-        },
+        options: { data: { display_name: displayName.trim() } },
       });
       if (error) throw error;
-      // New account: not onboarded yet regardless of session state
       set({ session: data.session ?? null, isOnboarded: false });
     } catch (err) {
       const error = parseError(err);
@@ -116,11 +135,51 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  upgradeGuest: async (email, password, displayName) => {
+    set({ isLoading: true, error: null });
+    isUpgrading = true;
+    try {
+      const { guestId } = get();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: displayName.trim() } },
+      });
+      if (error) throw error;
+
+      const newId = data.user?.id;
+      if (newId && guestId) {
+        await migrateGuestUser(guestId, newId, email);
+      }
+
+      await SecureStore.deleteItemAsync(GUEST_ID_KEY);
+      set({
+        session: data.session ?? null,
+        isGuest: false,
+        guestId: null,
+        isOnboarded: true,
+      });
+    } catch (err) {
+      const error = parseError(err);
+      set({ error });
+      throw new Error(error);
+    } finally {
+      set({ isLoading: false });
+      isUpgrading = false;
+    }
+  },
+
   signOut: async () => {
     set({ isLoading: true });
     try {
-      await supabase.auth.signOut();
-      set({ session: null, isOnboarded: false });
+      const { isGuest } = get();
+      if (isGuest) {
+        await SecureStore.deleteItemAsync(GUEST_ID_KEY);
+        set({ isGuest: false, guestId: null, isOnboarded: false });
+      } else {
+        await supabase.auth.signOut();
+        set({ session: null, isOnboarded: false });
+      }
     } finally {
       set({ isLoading: false });
     }

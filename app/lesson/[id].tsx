@@ -1,167 +1,149 @@
-import { View, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
+
+import ExerciseShell from '@/components/exercises/ExerciseShell';
+import { useExerciseStore } from '@/stores/exerciseStore';
+import { useLessonStore } from '@/stores/lessonStore';
+import { useProgressStore } from '@/stores/progressStore';
+import { useGamificationStore } from '@/stores/gamificationStore';
 import { useUserStore } from '@/stores/userStore';
 import { generateExerciseBatch } from '@/services/ai/exerciseGenerator';
+import { shuffle } from '@/utils/exerciseHelpers';
+import { getLessonById } from '@/utils/lessonData';
 import type { Exercise } from '@/types/exercise';
+
+const EXERCISES_PER_TYPE = 4;
+
+function interleave(arrays: Exercise[][]): Exercise[] {
+  const result: Exercise[] = [];
+  const maxLen = Math.max(...arrays.map((a) => a.length));
+  for (let i = 0; i < maxLen; i++) {
+    for (const arr of arrays) {
+      if (arr[i]) result.push(arr[i]);
+    }
+  }
+  return result;
+}
 
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useUserStore();
+  const user = useUserStore((s) => s.user);
+  const lessonDef = getLessonById(id, user?.current_level);
+  const effectiveLevel = lessonDef.levelOverride ?? user?.current_level ?? 'B2';
 
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [fromCache, setFromCache] = useState(false);
+  const { queue, currentIndex, isGenerating, generationError,
+    setQueue, advance, setGenerating, setGenerationError } = useExerciseStore();
+  const lessonStore = useLessonStore();
+  const progressStore = useProgressStore();
+  const gamification = useGamificationStore();
 
-  async function handleGenerate() {
-    if (!user) {
-      setError('No user profile found. Please complete onboarding.');
-      return;
+  // Consecutive correct streak within this lesson
+  const consecutiveCorrectRef = useRef(0);
+  const [, forceRender] = useState(0); // unused, just to remind: no re-render needed for ref
+
+  useEffect(() => {
+    if (!user) return;
+    setGenerating(true);
+    setGenerationError(null);
+    consecutiveCorrectRef.current = 0;
+
+    Promise.allSettled([
+      generateExerciseBatch('FILL_BLANK', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
+      generateExerciseBatch('MULTIPLE_CHOICE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
+      generateExerciseBatch('TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
+    ]).then((results) => {
+      const batches = results
+        .filter((r): r is PromiseFulfilledResult<Exercise[]> => r.status === 'fulfilled')
+        .map((r) => shuffle(r.value).slice(0, EXERCISES_PER_TYPE));
+
+      if (batches.length === 0) {
+        setGenerationError('Could not load exercises. Check your API keys and internet connection.');
+        return;
+      }
+
+      setQueue(interleave(batches));
+      lessonStore.startSession(id, user.id);
+    }).finally(() => setGenerating(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleContinue = useCallback((isCorrect: boolean, answer: string, timeMs: number) => {
+    if (!user) return;
+    const exercise = queue[currentIndex];
+    if (!exercise) return;
+
+    // Record progress to SQLite
+    progressStore.recordAttempt({
+      user_id: user.id,
+      exercise_id: exercise.id,
+      is_correct: isCorrect,
+      answer_given: answer,
+      time_spent_ms: timeMs,
+      attempted_at: new Date().toISOString(),
+    });
+
+    // Update lesson session + award XP
+    lessonStore.recordAnswer(isCorrect);
+
+    if (isCorrect) {
+      const xp = gamification.awardXP('correct_answer', effectiveLevel, consecutiveCorrectRef.current);
+      lessonStore.addXP(xp);
+      consecutiveCorrectRef.current += 1;
+    } else {
+      consecutiveCorrectRef.current = 0;
     }
 
-    setIsGenerating(true);
-    setError(null);
-    const startMs = Date.now();
-
-    try {
-      const result = await generateExerciseBatch(
-        'FILL_BLANK',
-        user.target_language,
-        user.native_language,
-        user.current_level,
-        'Subjunctive Mood',
-      );
-      setExercises(result);
-      setFromCache(Date.now() - startMs < 300); // cache hits are fast
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsGenerating(false);
+    // Advance or finish
+    if (currentIndex >= queue.length - 1) {
+      lessonStore.completeSession();
+      router.replace(`/lesson-complete/${id}`);
+    } else {
+      advance();
     }
+  }, [user, queue, currentIndex, effectiveLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Loading ─────────────────────────────────────────────────────────
+  if (isGenerating || (!queue.length && !generationError)) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center px-8">
+        <ActivityIndicator size="large" color="#0D9488" />
+        <Text className="text-slate-600 font-semibold text-lg mt-4">{lessonDef.title}</Text>
+        <Text className="text-slate-400 text-sm mt-1">Generating exercises…</Text>
+        {lessonDef.levelOverride ? (
+          <Text className="text-amber-500 text-xs font-semibold mt-2">
+            ⚡ Challenge mode — {lessonDef.levelOverride}
+          </Text>
+        ) : null}
+      </View>
+    );
   }
 
-  const firstExercise = exercises[0];
+  // ── Error ────────────────────────────────────────────────────────────
+  if (generationError) {
+    return (
+      <View className="flex-1 bg-white items-center justify-center px-8">
+        <Text className="text-4xl mb-4">⚠️</Text>
+        <Text className="text-slate-800 font-bold text-xl text-center mb-2">Couldn't load exercises</Text>
+        <Text className="text-slate-500 text-sm text-center mb-8">{generationError}</Text>
+        <Pressable className="bg-primary-600 rounded-2xl px-8 py-4" onPress={() => router.back()}>
+          <Text className="text-white font-bold text-base">Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const exercise = queue[currentIndex];
+  if (!exercise) return null;
 
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1 }}>
-      {/* Progress bar */}
-      <View className="bg-slate-100 h-2 mt-14">
-        <View className="bg-primary-500 h-2" style={{ width: '30%' }} />
-      </View>
-
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-6 py-4">
-        <Pressable onPress={() => router.back()}>
-          <Text className="text-slate-500 text-2xl">✕</Text>
-        </Pressable>
-        <Text className="text-slate-600 font-semibold">Lesson {id}</Text>
-        <Text className="text-red-500">❤️❤️❤️❤️❤️</Text>
-      </View>
-
-      {/* ── Test panel (Phase 1 dev tool) ── */}
-      <View className="mx-6 mt-2 mb-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-        <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-          AI Engine — Dev Test
-        </Text>
-
-        <Pressable
-          className={`rounded-xl py-3 items-center flex-row justify-center gap-2
-            ${isGenerating ? 'bg-primary-400' : 'bg-primary-600 active:opacity-80'}`}
-          onPress={handleGenerate}
-          disabled={isGenerating}
-        >
-          {isGenerating ? <ActivityIndicator size="small" color="white" /> : null}
-          <Text className="text-white font-semibold">
-            {isGenerating ? 'Generating…' : 'Generate Exercises (FILL_BLANK)'}
-          </Text>
-        </Pressable>
-
-        {error ? (
-          <View className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3">
-            <Text className="text-red-600 text-xs">{error}</Text>
-          </View>
-        ) : null}
-
-        {firstExercise ? (
-          <View className="mt-3">
-            <Text className="text-xs text-slate-400 mb-1">
-              {exercises.length} exercises · model: {firstExercise.ai_model_used}
-              {fromCache ? ' · ⚡ from cache' : ''}
-            </Text>
-
-            {/* First exercise preview */}
-            <View className="bg-white border border-primary-200 rounded-xl p-3">
-              <Text className="text-xs font-semibold text-primary-600 uppercase tracking-wide mb-1">
-                Exercise 1 — {firstExercise.type}
-              </Text>
-
-              {'sentence' in firstExercise.content && (
-                <>
-                  <Text className="text-slate-800 text-sm font-medium mb-2">
-                    {firstExercise.content.sentence}
-                  </Text>
-                  <View className="flex-row flex-wrap gap-2">
-                    {firstExercise.content.word_bank.map((w) => (
-                      <View key={w} className="bg-slate-100 rounded-lg px-3 py-1">
-                        <Text className="text-slate-700 text-sm">{w}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  {firstExercise.content.grammar_hint ? (
-                    <Text className="text-slate-400 text-xs mt-2 italic">
-                      💡 {firstExercise.content.grammar_hint}
-                    </Text>
-                  ) : null}
-                </>
-              )}
-
-              <Text className="text-slate-400 text-xs mt-2">
-                Difficulty: {firstExercise.difficulty_score} ·{' '}
-                {firstExercise.grammar_point ?? 'no grammar tag'}
-              </Text>
-            </View>
-
-            {/* All exercises count */}
-            {exercises.length > 1 ? (
-              <Text className="text-slate-400 text-xs mt-2 text-center">
-                + {exercises.length - 1} more in cache (see console)
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-
-      {/* ── Placeholder exercise UI (will be replaced in sub-task 3) ── */}
-      <View className="flex-1 px-6 pt-2">
-        <Text className="text-slate-500 text-sm font-medium uppercase tracking-wide mb-2">
-          Fill in the blank
-        </Text>
-        <Text className="text-slate-800 text-xl font-semibold mb-8 leading-8">
-          Es importante que ella ___ la verdad.{'\n'}
-          <Text className="text-slate-400 text-base">(subjunctive)</Text>
-        </Text>
-
-        <View className="flex-row flex-wrap gap-3 mb-8">
-          {['diga', 'dice', 'diría', 'dijera'].map((word) => (
-            <Pressable
-              key={word}
-              className="bg-slate-100 rounded-xl px-5 py-3 border-2 border-slate-200"
-            >
-              <Text className="text-slate-800 font-medium text-base">{word}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View className="px-6 pb-10">
-        <Pressable
-          className="bg-primary-600 rounded-2xl py-4 items-center"
-          onPress={() => router.push(`/lesson-complete/${id}`)}
-        >
-          <Text className="text-white font-bold text-lg">Check Answer</Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+    <ExerciseShell
+      key={exercise.id}
+      exercise={exercise}
+      currentIndex={currentIndex}
+      totalCount={queue.length}
+      targetLanguage={user?.target_language ?? 'en'}
+      onContinue={handleContinue}
+      onClose={() => router.back()}
+    />
   );
 }

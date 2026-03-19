@@ -90,6 +90,7 @@ async function isOnline(): Promise<boolean> {
 
 async function attemptProvider(
   caller: (system: string, user: string) => Promise<string>,
+  requestedType: ExerciseType,
   system: string,
   user: string,
   language: SupportedLanguage,
@@ -99,8 +100,20 @@ async function attemptProvider(
   hash: string,
 ): Promise<Exercise[]> {
   const raw = await caller(system, user);
-  const parsed = parseAIBatch(raw);
-  return parsed.map((r) => buildExercise(r, language, nativeLanguage, level, model, hash));
+  const allParsed = parseAIBatch(raw);
+
+  // Filter to the requested type; AI sometimes returns mixed types
+  const matching = allParsed.filter((r) => r.type === requestedType);
+  if (matching.length < allParsed.length) {
+    console.warn(
+      `[AI] ${allParsed.length - matching.length} exercise(s) had wrong type ` +
+      `(expected ${requestedType}), discarded`,
+    );
+  }
+
+  // If the AI ignored the type entirely, use all valid exercises rather than returning nothing
+  const toUse = matching.length > 0 ? matching : allParsed;
+  return toUse.map((r) => buildExercise(r, language, nativeLanguage, level, model, hash));
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -150,7 +163,7 @@ export async function generateExerciseBatch(
   // 2. Groq
   try {
     const exercises = await attemptProvider(
-      callGroqRaw, system, user, language, nativeLanguage, level, 'groq', hash,
+      callGroqRaw, type, system, user, language, nativeLanguage, level, 'groq', hash,
     );
     await saveExercises(exercises);
     await storeExerciseBatch(hash, exercises);
@@ -163,7 +176,7 @@ export async function generateExerciseBatch(
   // 3. Gemini
   try {
     const exercises = await attemptProvider(
-      callGeminiRaw, system, user, language, nativeLanguage, level, 'gemini', hash,
+      callGeminiRaw, type, system, user, language, nativeLanguage, level, 'gemini', hash,
     );
     await saveExercises(exercises);
     await storeExerciseBatch(hash, exercises);

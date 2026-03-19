@@ -13,17 +13,28 @@ import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginScreen() {
-  const { signIn, isLoading, error, clearError } = useAuthStore();
+  const { signIn, continueAsGuest, isLoading, error, clearError } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [guestLoading, setGuestLoading] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password) return;
     try {
       await signIn(email.trim().toLowerCase(), password);
     } catch {
-      // Error is already set in the store — nothing more to do here
+      // Error is already set in the store
+    }
+  }
+
+  async function handleGuest() {
+    setGuestLoading(true);
+    try {
+      await continueAsGuest();
+      // _layout.tsx will route to onboarding once isGuest is true
+    } finally {
+      setGuestLoading(false);
     }
   }
 
@@ -93,7 +104,7 @@ export default function LoginScreen() {
 
           {/* Sign in button */}
           <Pressable
-            className={`bg-primary-600 rounded-xl py-4 items-center justify-center flex-row gap-2 mb-6
+            className={`bg-primary-600 rounded-xl py-4 items-center justify-center flex-row gap-2 mb-3
               ${isLoading || !email || !password ? 'opacity-60' : 'active:opacity-80'}`}
             onPress={handleLogin}
             disabled={isLoading || !email.trim() || !password}
@@ -107,7 +118,7 @@ export default function LoginScreen() {
           </Pressable>
 
           {/* Sign up link */}
-          <View className="items-center">
+          <View className="items-center mb-6">
             <Text className="text-slate-500 text-sm">
               Don't have an account?{' '}
               <Link href="/(auth)/register">
@@ -115,6 +126,29 @@ export default function LoginScreen() {
               </Link>
             </Text>
           </View>
+
+          {/* Divider */}
+          <View className="flex-row items-center gap-3 mb-6">
+            <View className="flex-1 h-px bg-slate-200" />
+            <Text className="text-slate-400 text-xs">or</Text>
+            <View className="flex-1 h-px bg-slate-200" />
+          </View>
+
+          {/* Guest button */}
+          <Pressable
+            className="border border-slate-200 rounded-xl py-4 items-center active:bg-slate-50"
+            onPress={handleGuest}
+            disabled={guestLoading}
+          >
+            {guestLoading ? (
+              <ActivityIndicator size="small" color="#64748B" />
+            ) : (
+              <Text className="text-slate-600 font-semibold text-base">Try without an account</Text>
+            )}
+          </Pressable>
+          <Text className="text-slate-400 text-xs text-center mt-2">
+            Progress is saved locally on this device
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

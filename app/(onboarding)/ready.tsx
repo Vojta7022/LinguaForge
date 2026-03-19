@@ -8,14 +8,17 @@ import { upsertUser } from '@/repositories/userRepository';
 import type { User } from '@/types/user';
 
 export default function ReadyScreen() {
-  const { session, setOnboarded } = useAuthStore();
+  const { session, isGuest, guestId, setOnboarded } = useAuthStore();
   const { nativeLanguage, targetLanguage, level, dailyGoal, reset } = useOnboardingStore();
   const { setUser } = useUserStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Works for both Supabase users (session.user.id) and guests (guestId)
+  const userId = session?.user.id ?? (isGuest ? guestId : null);
+
   async function handleStart() {
-    if (!session?.user || !nativeLanguage || !targetLanguage) return;
+    if (!userId || !nativeLanguage || !targetLanguage) return;
 
     setIsLoading(true);
     setError(null);
@@ -23,9 +26,11 @@ export default function ReadyScreen() {
     try {
       const now = new Date().toISOString();
       const user: User = {
-        id: session.user.id,
-        email: session.user.email ?? '',
-        display_name: session.user.user_metadata?.display_name ?? session.user.email ?? 'Learner',
+        id: userId,
+        email: session?.user.email ?? '',
+        display_name:
+          session?.user.user_metadata?.display_name ??
+          (isGuest ? 'Learner' : session?.user.email ?? 'Learner'),
         native_language: nativeLanguage,
         target_language: targetLanguage,
         current_level: level,
@@ -43,7 +48,7 @@ export default function ReadyScreen() {
       reset();
 
       router.replace('/(tabs)');
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
       setIsLoading(false);
     }

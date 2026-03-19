@@ -16,15 +16,15 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
 
-  const { session, isOnboarded, isInitialized, initialize } = useAuthStore();
+  const { session, isGuest, guestId, isOnboarded, isInitialized, initialize } = useAuthStore();
   const { loadFromDB } = useUserStore();
 
-  // Step 1: Bootstrap — open SQLite (runs migrations) then restore auth session
+  // Step 1: Bootstrap — open SQLite (runs migrations) then restore auth/guest session
   useEffect(() => {
     async function bootstrap() {
       try {
-        await getDB();           // opens linguaforge.db and runs all migrations
-        await initialize();      // restores Supabase session from SecureStore
+        await getDB();
+        await initialize();
       } finally {
         setAppReady(true);
         await SplashScreen.hideAsync();
@@ -33,12 +33,13 @@ export default function RootLayout() {
     bootstrap();
   }, []);
 
-  // Step 2: Once auth is known, load user profile from SQLite
+  // Step 2: Load user profile from SQLite — works for both Supabase and guest users
+  const userId = session?.user.id ?? (isGuest ? guestId : null);
   useEffect(() => {
-    if (session?.user.id) {
-      loadFromDB(session.user.id);
+    if (userId) {
+      loadFromDB(userId);
     }
-  }, [session?.user.id]);
+  }, [userId]);
 
   // Step 3: Route based on auth + onboarding state
   useEffect(() => {
@@ -46,18 +47,16 @@ export default function RootLayout() {
 
     const inAuth = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)';
+    const isLoggedIn = !!session || isGuest;
 
-    if (!session) {
-      // Not logged in
+    if (!isLoggedIn) {
       if (!inAuth) router.replace('/(auth)/login');
     } else if (!isOnboarded) {
-      // Logged in but haven't completed onboarding
       if (!inOnboarding) router.replace('/(onboarding)/welcome');
     } else {
-      // Fully authenticated — boot out of auth/onboarding screens
       if (inAuth || inOnboarding) router.replace('/(tabs)');
     }
-  }, [appReady, isInitialized, session, isOnboarded, segments[0]]);
+  }, [appReady, isInitialized, session, isGuest, isOnboarded, segments[0]]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

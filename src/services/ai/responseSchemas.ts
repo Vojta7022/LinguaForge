@@ -125,7 +125,9 @@ export type AIBatchResponse = z.infer<typeof AIBatchResponseSchema>;
 
 /**
  * Strips markdown fences, parses JSON, and validates the batch response.
- * Throws with a descriptive message on failure.
+ * Validates each exercise individually — invalid items are skipped with a
+ * warning rather than failing the entire batch.
+ * Throws only if no valid exercises are found at all.
  */
 export function parseAIBatch(raw: string): AIExerciseRaw[] {
   // Strip ``` code fences if present
@@ -137,7 +139,6 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    // Attempt to extract a JSON object from a partially-wrapped response
     const objMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!objMatch) {
       throw new Error(`No JSON object found in AI response. Raw: ${cleaned.slice(0, 200)}`);
@@ -145,16 +146,35 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
     parsed = JSON.parse(objMatch[0]);
   }
 
-  const result = AIBatchResponseSchema.safeParse(parsed);
-  if (!result.success) {
+  // Check outer wrapper — just needs an exercises array
+  const outer = z.object({ exercises: z.array(z.unknown()).min(1) }).safeParse(parsed);
+  if (!outer.success) {
     throw new Error(
-      `AI response validation failed:\n${result.error.issues
-        .map((i) => `  [${i.path.join('.')}] ${i.message}`)
-        .join('\n')}\n\nRaw response (first 500 chars):\n${cleaned.slice(0, 500)}`,
+      `AI response missing 'exercises' array.\nRaw (first 500 chars):\n${cleaned.slice(0, 500)}`,
     );
   }
 
-  return result.data.exercises;
+  // Validate each exercise individually; skip invalid ones
+  const valid: AIExerciseRaw[] = [];
+  for (const [i, item] of outer.data.exercises.entries()) {
+    const result = AIExerciseSchema.safeParse(item);
+    if (result.success) {
+      valid.push(result.data);
+    } else {
+      const issues = result.error.issues
+        .map((e) => `[${e.path.join('.')}] ${e.message}`)
+        .join(', ');
+      console.warn(`[AI] Exercise ${i} invalid, skipping: ${issues}`);
+    }
+  }
+
+  if (valid.length === 0) {
+    throw new Error(
+      `No valid exercises in AI response (${outer.data.exercises.length} items all failed validation).`,
+    );
+  }
+
+  return valid;
 }
 
 /**

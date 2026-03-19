@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { UserProgress, TopicMastery } from '@/types/progress';
+import { recordProgress } from '@/repositories/progressRepository';
 
 interface ProgressState {
   recentProgress: UserProgress[];
@@ -15,17 +16,21 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   topicMastery: [],
 
   recordAttempt: async (progress) => {
-    // TODO: write to SQLite user_progress table (Phase 1)
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const full: UserProgress = { ...progress, id };
+
+    // Persist to SQLite (best-effort — don't block lesson flow on failure)
+    recordProgress(full).catch((err) =>
+      console.warn('[Progress] SQLite write failed:', err),
+    );
+
     set((state) => ({
-      recentProgress: [
-        { ...progress, id: Math.random().toString(36).slice(2) },
-        ...state.recentProgress.slice(0, 99),
-      ],
+      recentProgress: [full, ...state.recentProgress.slice(0, 99)],
     }));
   },
 
   loadTopicMastery: async (_userId, _language) => {
-    // TODO: load from SQLite (Phase 1)
+    // TODO Phase 2: load from SQLite
   },
 
   getWeakTopics: (threshold = 0.65) =>
