@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ExerciseContent } from '@/types/exercise';
 
-// ─── Core content schemas (used as TS types elsewhere) ────────────────────
+// ─── Core content schemas ──────────────────────────────────────────────────
 
 export const FillBlankSchema = z.object({
   type: z.literal('FILL_BLANK'),
@@ -10,6 +10,7 @@ export const FillBlankSchema = z.object({
   correct_answer: z.string().min(1),
   acceptable_answers: z.array(z.string()),
   grammar_hint: z.string().optional(),
+  distractor_reasons: z.record(z.string(), z.string()).optional(),
 });
 
 export const SentenceReorderSchema = z.object({
@@ -25,6 +26,7 @@ export const TranslateSchema = z.object({
   source_language: z.string(),
   reference_translation: z.string().min(3),
   acceptable_translations: z.array(z.string()),
+  key_words: z.array(z.string()).optional(),
   context_note: z.string().optional(),
 });
 
@@ -34,6 +36,7 @@ export const MultipleChoiceSchema = z.object({
   options: z.tuple([z.string(), z.string(), z.string(), z.string()]),
   correct_index: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
   explanation: z.string().min(10),
+  why_wrong: z.record(z.string(), z.string()).optional(),
 });
 
 export const ErrorCorrectionSchema = z.object({
@@ -82,7 +85,24 @@ export const ListeningSchema = z.object({
   transcript: z.string().optional(),
 });
 
-// ─── Metadata extension (flat — mixed into each exercise object) ──────────
+export const WordMatchSchema = z.object({
+  type: z.literal('WORD_MATCH'),
+  pairs: z.array(z.object({
+    target: z.string().min(1),
+    native: z.string().min(1),
+  })).min(4).max(6),
+});
+
+export const WordBankTranslateSchema = z.object({
+  type: z.literal('WORD_BANK_TRANSLATE'),
+  source_sentence: z.string().min(5),
+  source_language: z.string(),
+  translated_words: z.array(z.string().min(1)).min(3),
+  distractor_words: z.array(z.string().min(1)).min(2).max(4),
+  correct_sentence: z.string().min(3),
+});
+
+// ─── Metadata extension (merged flat into each exercise) ──────────────────
 
 const aiMetaSchema = z.object({
   difficulty_score: z.number().int().min(1).max(100).optional(),
@@ -90,7 +110,7 @@ const aiMetaSchema = z.object({
   vocab_topic: z.string().nullable().optional(),
 });
 
-// ─── AI response schemas (content + metadata, all at top level) ───────────
+// ─── AI response schemas ───────────────────────────────────────────────────
 
 const FillBlankAISchema = FillBlankSchema.merge(aiMetaSchema);
 const SentenceReorderAISchema = SentenceReorderSchema.merge(aiMetaSchema);
@@ -101,6 +121,8 @@ const ClozeAISchema = ClozeSchema.merge(aiMetaSchema);
 const IdiomMatchAISchema = IdiomMatchSchema.merge(aiMetaSchema);
 const ContextualVocabAISchema = ContextualVocabSchema.merge(aiMetaSchema);
 const ListeningAISchema = ListeningSchema.merge(aiMetaSchema);
+const WordMatchAISchema = WordMatchSchema.merge(aiMetaSchema);
+const WordBankTranslateAISchema = WordBankTranslateSchema.merge(aiMetaSchema);
 
 export const AIExerciseSchema = z.discriminatedUnion('type', [
   FillBlankAISchema,
@@ -112,25 +134,20 @@ export const AIExerciseSchema = z.discriminatedUnion('type', [
   IdiomMatchAISchema,
   ContextualVocabAISchema,
   ListeningAISchema,
+  WordMatchAISchema,
+  WordBankTranslateAISchema,
 ]);
 
-export const AIBatchResponseSchema = z.object({
-  exercises: z.array(AIExerciseSchema).min(1),
-});
-
 export type AIExerciseRaw = z.infer<typeof AIExerciseSchema>;
-export type AIBatchResponse = z.infer<typeof AIBatchResponseSchema>;
 
 // ─── Parsing ──────────────────────────────────────────────────────────────
 
 /**
- * Strips markdown fences, parses JSON, and validates the batch response.
- * Validates each exercise individually — invalid items are skipped with a
- * warning rather than failing the entire batch.
- * Throws only if no valid exercises are found at all.
+ * Strips markdown fences, parses JSON, validates each exercise individually.
+ * Invalid items are skipped with a warning rather than failing the whole batch.
+ * Throws only if no valid exercises survive.
  */
 export function parseAIBatch(raw: string): AIExerciseRaw[] {
-  // Strip ``` code fences if present
   let cleaned = raw.trim();
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) cleaned = fenceMatch[1].trim();
@@ -146,7 +163,6 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
     parsed = JSON.parse(objMatch[0]);
   }
 
-  // Check outer wrapper — just needs an exercises array
   const outer = z.object({ exercises: z.array(z.unknown()).min(1) }).safeParse(parsed);
   if (!outer.success) {
     throw new Error(
@@ -154,7 +170,6 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
     );
   }
 
-  // Validate each exercise individually; skip invalid ones
   const valid: AIExerciseRaw[] = [];
   for (const [i, item] of outer.data.exercises.entries()) {
     const result = AIExerciseSchema.safeParse(item);
@@ -178,8 +193,7 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
 }
 
 /**
- * Extracts just the content fields (drops AI metadata) from a raw exercise.
- * Safe cast: metadata fields were already stripped by destructuring.
+ * Drops AI metadata fields, returning only the exercise content fields.
  */
 export function extractContent(raw: AIExerciseRaw): ExerciseContent {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

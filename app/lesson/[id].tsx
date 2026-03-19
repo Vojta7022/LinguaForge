@@ -1,6 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 import ExerciseShell from '@/components/exercises/ExerciseShell';
 import { useExerciseStore } from '@/stores/exerciseStore';
@@ -13,7 +13,14 @@ import { shuffle } from '@/utils/exerciseHelpers';
 import { getLessonById } from '@/utils/lessonData';
 import type { Exercise } from '@/types/exercise';
 
-const EXERCISES_PER_TYPE = 4;
+// How many exercises per type to include in a lesson
+const PER_TYPE = {
+  FILL_BLANK: 4,
+  MULTIPLE_CHOICE: 3,
+  TRANSLATE: 2,
+  WORD_MATCH: 2,
+  WORD_BANK_TRANSLATE: 3,
+} as const;
 
 function interleave(arrays: Exercise[][]): Exercise[] {
   const result: Exercise[] = [];
@@ -38,9 +45,7 @@ export default function LessonScreen() {
   const progressStore = useProgressStore();
   const gamification = useGamificationStore();
 
-  // Consecutive correct streak within this lesson
   const consecutiveCorrectRef = useRef(0);
-  const [, forceRender] = useState(0); // unused, just to remind: no re-render needed for ref
 
   useEffect(() => {
     if (!user) return;
@@ -52,10 +57,16 @@ export default function LessonScreen() {
       generateExerciseBatch('FILL_BLANK', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
       generateExerciseBatch('MULTIPLE_CHOICE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
       generateExerciseBatch('TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic),
+      generateExerciseBatch('WORD_MATCH', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
+      generateExerciseBatch('WORD_BANK_TRANSLATE', user.target_language, user.native_language, effectiveLevel, lessonDef.topic, 6),
     ]).then((results) => {
+      const types = ['FILL_BLANK', 'MULTIPLE_CHOICE', 'TRANSLATE', 'WORD_MATCH', 'WORD_BANK_TRANSLATE'] as const;
       const batches = results
-        .filter((r): r is PromiseFulfilledResult<Exercise[]> => r.status === 'fulfilled')
-        .map((r) => shuffle(r.value).slice(0, EXERCISES_PER_TYPE));
+        .map((r, i) => {
+          if (r.status !== 'fulfilled') return [];
+          return shuffle(r.value).slice(0, PER_TYPE[types[i]]);
+        })
+        .filter((b) => b.length > 0);
 
       if (batches.length === 0) {
         setGenerationError('Could not load exercises. Check your API keys and internet connection.');
@@ -72,7 +83,6 @@ export default function LessonScreen() {
     const exercise = queue[currentIndex];
     if (!exercise) return;
 
-    // Record progress to SQLite
     progressStore.recordAttempt({
       user_id: user.id,
       exercise_id: exercise.id,
@@ -82,7 +92,6 @@ export default function LessonScreen() {
       attempted_at: new Date().toISOString(),
     });
 
-    // Update lesson session + award XP
     lessonStore.recordAnswer(isCorrect);
 
     if (isCorrect) {
@@ -93,7 +102,6 @@ export default function LessonScreen() {
       consecutiveCorrectRef.current = 0;
     }
 
-    // Advance or finish
     if (currentIndex >= queue.length - 1) {
       lessonStore.completeSession();
       router.replace(`/lesson-complete/${id}`);
@@ -141,7 +149,8 @@ export default function LessonScreen() {
       exercise={exercise}
       currentIndex={currentIndex}
       totalCount={queue.length}
-      targetLanguage={user?.target_language ?? 'en'}
+      targetLanguage={user?.target_language ?? 'es'}
+      nativeLanguage={user?.native_language ?? 'en'}
       onContinue={handleContinue}
       onClose={() => router.back()}
     />

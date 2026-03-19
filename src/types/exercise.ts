@@ -9,22 +9,26 @@ export type ExerciseType =
   | 'CLOZE'
   | 'IDIOM_MATCH'
   | 'CONTEXTUAL_VOCAB'
-  | 'LISTENING';
+  | 'LISTENING'
+  | 'WORD_MATCH'
+  | 'WORD_BANK_TRANSLATE';
 
 // ---------- Content shapes (type-discriminated union) ----------
 
 export interface FillBlankContent {
   type: 'FILL_BLANK';
-  sentence: string;            // "Es importante que ella ___ la verdad."
-  word_bank: string[];         // includes correct + distractors
+  sentence: string;
+  word_bank: string[];
   correct_answer: string;
   acceptable_answers: string[];
   grammar_hint?: string;
+  /** word → why that word is wrong (keyed by distractor text) */
+  distractor_reasons?: Record<string, string>;
 }
 
 export interface SentenceReorderContent {
   type: 'SENTENCE_REORDER';
-  words: string[];             // shuffled word tokens
+  words: string[];
   correct_sentence: string;
   grammar_note?: string;
 }
@@ -35,15 +39,19 @@ export interface TranslateContent {
   source_language: SupportedLanguage;
   reference_translation: string;
   acceptable_translations: string[];
+  /** Essential words that must appear in any correct answer */
+  key_words?: string[];
   context_note?: string;
 }
 
 export interface MultipleChoiceContent {
   type: 'MULTIPLE_CHOICE';
   question: string;
-  options: [string, string, string, string]; // always exactly 4
+  options: [string, string, string, string];
   correct_index: 0 | 1 | 2 | 3;
   explanation: string;
+  /** option text → why that option is wrong */
+  why_wrong?: Record<string, string>;
 }
 
 export interface ErrorCorrectionContent {
@@ -63,15 +71,15 @@ export interface ClozeBlank {
 
 export interface ClozeContent {
   type: 'CLOZE';
-  passage: string;             // paragraph with ___ for each blank
+  passage: string;
   blanks: ClozeBlank[];
 }
 
 export interface IdiomMatchContent {
   type: 'IDIOM_MATCH';
   idioms: string[];
-  meanings: string[];          // same length, shuffled
-  correct_pairs: [number, number][]; // [idiom_index, meaning_index]
+  meanings: string[];
+  correct_pairs: [number, number][];
 }
 
 export interface ContextualVocabContent {
@@ -81,17 +89,36 @@ export interface ContextualVocabContent {
   question: string;
   options: [string, string, string, string];
   correct_index: 0 | 1 | 2 | 3;
-  word_in_context: string;     // excerpt highlighting the word
+  word_in_context: string;
 }
 
 export interface ListeningContent {
   type: 'LISTENING';
-  tts_text: string;            // text spoken by expo-speech
-  tts_locale: string;          // e.g. 'es-ES'
+  tts_text: string;
+  tts_locale: string;
   question: string;
   options: [string, string, string, string];
   correct_index: 0 | 1 | 2 | 3;
-  transcript?: string;         // shown after answering
+  transcript?: string;
+}
+
+export interface WordMatchContent {
+  type: 'WORD_MATCH';
+  /** 4–6 word pairs: target-language word + native-language translation */
+  pairs: Array<{ target: string; native: string }>;
+}
+
+export interface WordBankTranslateContent {
+  type: 'WORD_BANK_TRANSLATE';
+  /** Sentence shown to the user (in the target language they are learning) */
+  source_sentence: string;
+  source_language: SupportedLanguage;
+  /** Correct translation words in the right order (native language) */
+  translated_words: string[];
+  /** 2–3 extra tiles that don't belong in the translation */
+  distractor_words: string[];
+  /** Full correct native-language sentence (= translated_words joined) */
+  correct_sentence: string;
 }
 
 export type ExerciseContent =
@@ -103,7 +130,9 @@ export type ExerciseContent =
   | ClozeContent
   | IdiomMatchContent
   | ContextualVocabContent
-  | ListeningContent;
+  | ListeningContent
+  | WordMatchContent
+  | WordBankTranslateContent;
 
 // ---------- Exercise entity ----------
 
@@ -112,7 +141,7 @@ export interface Exercise {
   lesson_id: string | null;
   type: ExerciseType;
   content: ExerciseContent;
-  difficulty_score: number;    // 1-100 (B1≈25, B2≈50, C1≈75, C2≈95)
+  difficulty_score: number;
   language: SupportedLanguage;
   level: CEFRLevel;
   grammar_point: string | null;
@@ -123,7 +152,7 @@ export interface Exercise {
   ai_model_used: 'groq' | 'gemini' | 'static';
   prompt_hash: string | null;
   generated_at: string;
-  expires_at: string | null;   // cached exercises expire after 7 days
+  expires_at: string | null;
 }
 
 export const XP_BY_LEVEL: Record<CEFRLevel, number> = {

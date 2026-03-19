@@ -134,6 +134,7 @@ export async function generateExerciseBatch(
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
   topic: string,
+  batchSize = BATCH_SIZE,
 ): Promise<Exercise[]> {
   const hash = buildPromptHash(type, language, nativeLanguage, level, topic);
 
@@ -157,7 +158,7 @@ export async function generateExerciseBatch(
   }
 
   const { system, user } = buildExercisePrompt(
-    type, language, nativeLanguage, level, topic, BATCH_SIZE,
+    type, language, nativeLanguage, level, topic, batchSize,
   );
 
   // 2. Groq

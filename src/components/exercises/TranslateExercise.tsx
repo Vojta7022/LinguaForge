@@ -31,6 +31,12 @@ export default function TranslateExercise({
     if (isChecked) Keyboard.dismiss();
   }, [isChecked]);
 
+  const borderColor = isChecked
+    ? isCorrect
+      ? 'border-green-400 bg-green-50'
+      : 'border-red-400 bg-red-50'
+    : 'border-slate-200 bg-white';
+
   return (
     <View className="flex-1">
       {/* Direction label */}
@@ -52,15 +58,7 @@ export default function TranslateExercise({
 
       {/* Text input */}
       <TextInput
-        className={`border-2 rounded-2xl px-4 py-3 text-base text-slate-800 min-h-[100px]
-          ${isChecked
-            ? isCorrect
-              ? 'border-green-400 bg-green-50'
-              : isClose
-              ? 'border-amber-400 bg-amber-50'
-              : 'border-red-400 bg-red-50'
-            : 'border-slate-200 bg-white'
-          }`}
+        className={`border-2 rounded-2xl px-4 py-3 text-base text-slate-800 min-h-[100px] ${borderColor}`}
         placeholder={`Write in ${targetLangName}…`}
         placeholderTextColor="#94A3B8"
         value={selectedAnswer ?? ''}
@@ -72,30 +70,31 @@ export default function TranslateExercise({
         editable={!isChecked}
       />
 
-      {/* Character count */}
       {!isChecked && (selectedAnswer?.length ?? 0) > 0 ? (
         <Text className="text-slate-400 text-xs text-right mt-1">
           {selectedAnswer?.length} chars
         </Text>
       ) : null}
 
-      {/* Post-check: reference translation */}
+      {/* Post-check: reference + alternatives */}
       {isChecked ? (
-        <View className={`mt-4 rounded-2xl p-4 border
-          ${isClose ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}
-        >
-          {isClose ? (
-            <Text className="text-amber-700 text-xs font-semibold mb-1">
-              ✨ Very close! Reference answer:
-            </Text>
-          ) : (
-            <Text className="text-slate-500 text-xs font-semibold mb-1">
-              Reference answer:
-            </Text>
-          )}
-          <Text className="text-slate-800 text-sm font-medium leading-5">
+        <View className="mt-4 rounded-2xl p-4 border bg-slate-50 border-slate-200">
+          <Text className="text-slate-500 text-xs font-semibold mb-1">
+            {isClose ? '✨ Also acceptable — reference answer:' : 'Reference answer:'}
+          </Text>
+          <Text className="text-slate-800 text-sm font-medium leading-5 mb-2">
             {content.reference_translation}
           </Text>
+          {content.acceptable_translations && content.acceptable_translations.length > 0 ? (
+            <>
+              <Text className="text-slate-400 text-xs font-semibold mt-1 mb-1">
+                Also accepted:
+              </Text>
+              {content.acceptable_translations.map((alt, i) => (
+                <Text key={i} className="text-slate-600 text-xs leading-5">• {alt}</Text>
+              ))}
+            </>
+          ) : null}
         </View>
       ) : null}
     </View>

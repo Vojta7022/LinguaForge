@@ -33,6 +33,10 @@ function getQuestionAndAnswer(content: ExerciseContent): { question: string; ans
       return { question: content.question, answer: content.options[content.correct_index] };
     case 'LISTENING':
       return { question: content.question, answer: content.options[content.correct_index] };
+    case 'WORD_MATCH':
+      return { question: content.pairs.map((p) => p.target).join(', '), answer: content.pairs.map((p) => p.native).join(', ') };
+    case 'WORD_BANK_TRANSLATE':
+      return { question: content.source_sentence, answer: content.correct_sentence };
   }
 }
 
@@ -47,6 +51,8 @@ function ExerciseTypeTag({ type }: { type: string }) {
     IDIOM_MATCH: 'Idioms',
     CONTEXTUAL_VOCAB: 'Vocab',
     LISTENING: 'Listening',
+    WORD_MATCH: 'Word match',
+    WORD_BANK_TRANSLATE: 'Word bank',
   };
   return (
     <View className="bg-slate-100 rounded-full px-2 py-0.5 self-start mb-1">
