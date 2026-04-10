@@ -92,6 +92,24 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON exercise_cache_meta(prompt_hash);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE IF NOT EXISTS course_roadmaps (
+        id TEXT PRIMARY KEY,
+        cache_key TEXT NOT NULL UNIQUE,
+        language TEXT NOT NULL,
+        native_language TEXT NOT NULL,
+        level TEXT NOT NULL,
+        roadmap_json TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        expires_at TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_course_roadmap_cache_key
+        ON course_roadmaps(cache_key);
+    `,
+  },
 ];
 
 /** Run pending migrations. Safe to call on every app start. */

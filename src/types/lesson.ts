@@ -9,6 +9,14 @@ export type SkillArea =
   | 'writing'
   | 'culture';
 
+export type LessonKind =
+  | 'new_vocabulary'
+  | 'new_grammar'
+  | 'skill_practice'
+  | 'review';
+
+export type LessonSkillType = 'vocabulary' | 'grammar' | 'mixed';
+
 export interface Lesson {
   id: string;
   unit_id: string;
@@ -49,4 +57,52 @@ export interface LessonSession {
   xp_earned: number;
   is_completed: boolean;
   time_spent_seconds: number;
+}
+
+export interface LessonDefinition {
+  id: string;
+  unitId: string;
+  unitTitle: string;
+  unitIndex: number;
+  lessonIndex: number;
+  title: string;
+  description: string;
+  icon: string;
+  topic: string;
+  lessonKind: LessonKind;
+  skillType: LessonSkillType;
+  focusLabel: string;
+  objective: string;
+  grammarFocus: string[];
+  vocabularyFocus: string[];
+  canDo: string[];
+  levelOverride?: CEFRLevel;
+}
+
+export interface RoadmapUnitDefinition {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  orderIndex: number;
+  theme: string;
+  level: CEFRLevel;
+  lessonIds: string[];
+  grammarFocus: string[];
+  vocabularyFocus: string[];
+  canDo: string[];
+}
+
+export interface CourseRoadmap {
+  id: string;
+  title: string;
+  summary: string;
+  language: SupportedLanguage;
+  nativeLanguage: SupportedLanguage;
+  level: CEFRLevel;
+  units: RoadmapUnitDefinition[];
+  lessons: LessonDefinition[];
+  generatedAt: string;
+  expiresAt: string | null;
+  source: 'ai' | 'fallback';
 }

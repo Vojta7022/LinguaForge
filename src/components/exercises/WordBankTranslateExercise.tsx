@@ -67,6 +67,10 @@ export default function WordBankTranslateExercise({
 
   return (
     <View className="flex-1">
+      <Text className="text-slate-500 text-sm font-semibold uppercase tracking-wide mb-3">
+        Build the translation
+      </Text>
+
       {/* Source sentence */}
       <View className="bg-slate-50 rounded-2xl p-4 mb-4 border border-slate-200">
         <Text className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1">

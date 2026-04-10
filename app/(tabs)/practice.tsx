@@ -1,8 +1,11 @@
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { useUserStore } from '@/stores/userStore';
-import { useProgressStore } from '@/stores/progressStore';
-import { LESSONS } from '@/utils/lessonData';
+import { useLessonStore } from '@/stores/lessonStore';
+import { LESSONS, buildFallbackRoadmap } from '@/utils/lessonData';
+
+const EMPTY_LESSONS: ReturnType<typeof buildFallbackRoadmap>['lessons'] = [];
 
 // Accuracy for a topic derived from in-memory progress (best-effort)
 function useMockAccuracy(index: number): number {
@@ -52,9 +55,17 @@ function GrammarRow({
 
 export default function PracticeScreen() {
   const user = useUserStore((s) => s.user);
+  const courseRoadmap = useLessonStore((s) => s.courseRoadmap);
+  const roadmapLessons = courseRoadmap?.lessons ?? EMPTY_LESSONS;
+  const fallbackLessons = useMemo(() => user
+    ? buildFallbackRoadmap(user.target_language, user.native_language, user.current_level).lessons
+    : LESSONS,
+  [user]);
+  const availableLessons = roadmapLessons.length > 0 ? roadmapLessons : fallbackLessons;
+  const grammarLessons = availableLessons.filter((lesson) => lesson.lessonKind !== 'review').slice(0, 8);
 
   // Pick a "weak" topic — for now, just rotate through lessons
-  const quickTopic = LESSONS[Math.floor(Date.now() / 86_400_000) % LESSONS.length];
+  const quickTopic = availableLessons[Math.floor(Date.now() / 86_400_000) % availableLessons.length];
 
   function handleQuickPractice() {
     router.push(`/lesson/practice-${quickTopic.id}`);
@@ -62,7 +73,7 @@ export default function PracticeScreen() {
 
   function handleChallenge() {
     // Challenge: first lesson, one level up
-    router.push(`/lesson/challenge-${LESSONS[0].id}`);
+    router.push(`/lesson/challenge-${availableLessons[0].id}`);
   }
 
   return (
@@ -98,7 +109,7 @@ export default function PracticeScreen() {
           <Text className="text-slate-400 text-xs mb-3">
             Tap a topic to generate targeted exercises
           </Text>
-          {LESSONS.map((lesson, index) => (
+          {grammarLessons.map((lesson, index) => (
             <GrammarRow
               key={lesson.id}
               lesson={lesson}

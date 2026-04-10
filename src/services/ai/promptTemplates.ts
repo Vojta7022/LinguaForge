@@ -1,4 +1,5 @@
 import type { ExerciseType } from '@/types/exercise';
+import type { LessonDefinition, LessonKind } from '@/types/lesson';
 import type { CEFRLevel, SupportedLanguage } from '@/types/user';
 import { LANGUAGE_NAMES } from '@/types/user';
 import { getLevelInstruction, getScoreRange } from './difficultyScaler';
@@ -51,6 +52,75 @@ function focusInstruction(focus: ExerciseFocus): string {
     return 'FOCUS: ALL exercises must test GRAMMAR — verb conjugations, tenses, moods, agreement, sentence structure, word order.';
   }
   return 'FOCUS: Approximately 70% vocabulary (word meaning, synonyms, collocations) and 30% grammar (conjugations, tenses, moods). Prefer vocabulary.';
+}
+
+export interface LessonBlueprint {
+  count: number;
+  focus: ExerciseFocus;
+  sequence: ExerciseType[];
+}
+
+const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
+  new_vocabulary: {
+    count: 8,
+    focus: 'vocabulary',
+    sequence: [
+      'WORD_MATCH',
+      'MULTIPLE_CHOICE',
+      'WORD_BANK_TRANSLATE',
+      'WORD_BANK_TRANSLATE',
+      'FILL_BLANK',
+      'MULTIPLE_CHOICE',
+      'SENTENCE_REORDER',
+      'TRANSLATE',
+    ],
+  },
+  new_grammar: {
+    count: 8,
+    focus: 'grammar',
+    sequence: [
+      'MULTIPLE_CHOICE',
+      'FILL_BLANK',
+      'FILL_BLANK',
+      'SENTENCE_REORDER',
+      'WORD_BANK_TRANSLATE',
+      'FILL_BLANK',
+      'TRANSLATE',
+      'MULTIPLE_CHOICE',
+    ],
+  },
+  skill_practice: {
+    count: 8,
+    focus: 'mixed',
+    sequence: [
+      'MULTIPLE_CHOICE',
+      'WORD_MATCH',
+      'FILL_BLANK',
+      'WORD_BANK_TRANSLATE',
+      'SENTENCE_REORDER',
+      'MULTIPLE_CHOICE',
+      'TRANSLATE',
+      'FILL_BLANK',
+    ],
+  },
+  review: {
+    count: 8,
+    focus: 'mixed',
+    sequence: [
+      'WORD_MATCH',
+      'MULTIPLE_CHOICE',
+      'FILL_BLANK',
+      'WORD_BANK_TRANSLATE',
+      'SENTENCE_REORDER',
+      'MULTIPLE_CHOICE',
+      'TRANSLATE',
+      'WORD_BANK_TRANSLATE',
+    ],
+  },
+};
+
+export function getLessonBlueprint(kind: LessonKind): LessonBlueprint {
+  return LESSON_BLUEPRINTS[kind];
 }
 
 // ─── Per-type prompt builders ──────────────────────────────────────────────
@@ -377,6 +447,179 @@ Requirements:
 - correct_sentence MUST equal words (in the right order) joined with spaces
 - All ${count} exercises must use different sentence constructions
 - Do NOT use the example above in your output`;
+}
+
+function lessonTypeSpecs(language: SupportedLanguage, nativeLanguage: SupportedLanguage): string {
+  return `
+TYPE SPECS:
+
+1. WORD_MATCH
+- Fields: type, pairs, difficulty_score, grammar_point, vocab_topic
+- Use exactly 5 pairs. Each pair is { "target": "...", "native": "..." }.
+- Target-language words must be short, high-frequency for the lesson, and unambiguous.
+
+2. MULTIPLE_CHOICE
+- Fields: type, question, options, correct_index, explanation, why_wrong, difficulty_score, grammar_point, vocab_topic
+- Exactly 4 options, exactly 1 correct.
+- why_wrong must include a reason for each wrong option text.
+
+3. WORD_BANK_TRANSLATE
+- Fields: type, source_sentence, source_language, translated_words, distractor_words, correct_sentence, direction, difficulty_score, grammar_point, vocab_topic
+- source_language must be "${nativeLanguage}" when direction is "to_target".
+- translated_words joined with spaces must exactly equal correct_sentence.
+- Use 2-3 distractor_words.
+
+4. FILL_BLANK
+- Fields: type, sentence, word_bank, correct_answer, acceptable_answers, grammar_hint, distractor_reasons, difficulty_score, grammar_point, vocab_topic
+- sentence must contain exactly one blank written as ___.
+- word_bank must have exactly 4 items and include correct_answer.
+- distractor_reasons must explain each wrong option.
+
+5. SENTENCE_REORDER
+- Fields: type, native_sentence, words, correct_sentence, grammar_note, difficulty_score, grammar_point, vocab_topic
+- native_sentence is in the learner's native language.
+- words must be SHUFFLED and must reconstruct correct_sentence.
+
+6. TRANSLATE
+- Fields: type, source_text, source_language, reference_translation, acceptable_translations, key_words, context_note, difficulty_score, grammar_point, vocab_topic
+- source_language must be "${nativeLanguage}".
+- acceptable_translations should contain 2-4 valid target-language answers.
+- Keep translations natural, never word-for-word.
+
+LANGUAGE PAIR:
+- Target language ISO code: "${language}"
+- Native language ISO code: "${nativeLanguage}"`;
+}
+
+export function buildRoadmapPrompt(
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+  unitCount = 10,
+): { system: string; user: string } {
+  const lang = LANGUAGE_NAMES[language];
+  const nativeLang = LANGUAGE_NAMES[nativeLanguage];
+
+  return {
+    system: `You are a curriculum designer creating a Duolingo-style language path for adult learners. Respond with ONLY valid JSON.`,
+    user: `Create a forward-looking course roadmap for a ${nativeLang}-speaking learner studying ${lang} at CEFR ${level}.
+
+Design the roadmap like a bite-size app path:
+- Keep lessons short and focused.
+- Every unit should make it obvious what the learner is about to practice.
+- Alternate between new vocabulary, new grammar, mixed practice, and review.
+- Make the progression feel coherent over the next ${unitCount} units.
+- Keep the content suitable for adult learners and real-world language, not childlike beginner content.
+
+Each unit MUST contain exactly 4 lessons in this order:
+1. "new_vocabulary" — introduce useful words/phrases for the unit theme
+2. "new_grammar" — teach one bite-size grammar pattern tied to the same theme
+3. "skill_practice" — mixed practice using the words + grammar already introduced
+4. "review" — retrieval practice only, no new material
+
+Return this exact JSON structure:
+{
+  "title": "Course roadmap title",
+  "summary": "One-paragraph overview of what the next 10 units build toward.",
+  "units": [
+    {
+      "title": "Unit 1 title",
+      "description": "What the unit covers and why it matters.",
+      "theme": "Broad theme label",
+      "grammar_focus": ["item 1", "item 2"],
+      "vocabulary_focus": ["item 1", "item 2", "item 3"],
+      "can_do": ["Learner outcome 1", "Learner outcome 2"],
+      "lessons": [
+        {
+          "title": "Lesson title",
+          "description": "Short lesson description",
+          "topic": "Prompt-ready topic string for exercise generation",
+          "lesson_kind": "new_vocabulary",
+          "skill_type": "vocabulary",
+          "focus_label": "New words",
+          "objective": "What the learner should achieve in this lesson",
+          "grammar_focus": ["item 1"],
+          "vocabulary_focus": ["item 1", "item 2"]
+        }
+      ]
+    }
+  ]
+}
+
+Requirements:
+- Exactly ${unitCount} units.
+- Exactly 4 lessons per unit.
+- Titles should be concise: 2-5 words for lessons, 2-6 words for units.
+- "review" lessons must explicitly avoid introducing new material.
+- The roadmap must feel cumulative from Unit 1 through Unit ${unitCount}.
+- Use real adult contexts: work, travel, news, relationships, study, culture, public life.
+- Keep the progression aligned with ${level}.
+- Return JSON only. No markdown, no notes, no commentary.`,
+  };
+}
+
+export function buildLessonPrompt(
+  lesson: LessonDefinition,
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+): { system: string; user: string; blueprint: LessonBlueprint } {
+  const lang = LANGUAGE_NAMES[language];
+  const nativeLang = LANGUAGE_NAMES[nativeLanguage];
+  const blueprint = getLessonBlueprint(lesson.lessonKind);
+  const sequence = blueprint.sequence.map((type, index) => `${index + 1}. ${type}`).join('\n');
+
+  return {
+    system: SYSTEM_PROMPT + languageSpecificAddendum(language),
+    user: `Generate one complete mobile language lesson for a ${nativeLang}-speaking learner studying ${lang} at CEFR ${level}.
+
+Lesson context:
+- Unit: ${lesson.unitTitle}
+- Lesson title: ${lesson.title}
+- Lesson kind: ${lesson.lessonKind}
+- Focus label shown to learner: ${lesson.focusLabel}
+- Lesson objective: ${lesson.objective}
+- Topic prompt: ${lesson.topic}
+- Grammar focus: ${lesson.grammarFocus.join(', ')}
+- Vocabulary focus: ${lesson.vocabularyFocus.join(', ')}
+- Learner outcomes: ${lesson.canDo.join(' | ')}
+
+This lesson should feel like a Duolingo-style run:
+- Start with fast recognition when appropriate.
+- Move into guided production with tiles and short transformations.
+- Finish with slightly more demanding recall.
+- Keep it brisk, clear, and game-like.
+- Use ONLY the material appropriate for this lesson kind.
+- For "review", do NOT introduce new vocabulary or grammar beyond the provided focus.
+
+${focusInstruction(blueprint.focus)}
+
+You MUST return exactly ${blueprint.count} exercises in this exact order and type sequence:
+${sequence}
+
+${lessonTypeSpecs(language, nativeLanguage)}
+
+Return JSON only in this shape:
+{
+  "lesson_summary": "One short sentence about what this lesson practices.",
+  "exercises": [
+    {
+      "type": "WORD_MATCH"
+    }
+  ]
+}
+
+Hard rules:
+- The exercises array length must be exactly ${blueprint.count}.
+- The type at each position must exactly match the required sequence above.
+- Keep every exercise on-topic for "${lesson.topic}".
+- Recycle the same small set of words/structures inside the lesson so it feels cohesive.
+- Do not repeat the exact same sentence pattern twice.
+- difficulty_score must stay appropriate for ${level}.
+- Every correct answer must be present in the choices/tiles for that exercise.
+- Return JSON only.`,
+    blueprint,
+  };
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────

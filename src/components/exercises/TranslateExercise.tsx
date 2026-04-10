@@ -31,6 +31,10 @@ export default function TranslateExercise({
 
   return (
     <View className="flex-1">
+      <Text className="text-slate-500 text-sm font-semibold uppercase tracking-wide mb-3">
+        Write this in {targetLangName}
+      </Text>
+
       {/* Direction label */}
       <Text className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">
         {nativeLangName} → {targetLangName}

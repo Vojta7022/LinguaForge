@@ -1,187 +1,348 @@
-import type { CEFRLevel } from '@/types/user';
-
-export interface LessonDefinition {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  /** Used as the `topic` parameter for AI exercise generation */
-  topic: string;
-  unitTitle: string;
-  /** Override the user's CEFR level for this lesson (used for Challenge mode) */
-  levelOverride?: CEFRLevel;
-}
-
-export const LESSONS: LessonDefinition[] = [
-  {
-    id: 'subjunctive-mood',
-    title: 'Subjunctive Mood',
-    description: 'Nominal and adverbial subjunctive clauses',
-    icon: '🌀',
-    topic: 'Subjunctive Mood',
-    unitTitle: 'Grammar Mastery',
-  },
-  {
-    id: 'conditional-clauses',
-    title: 'Conditionals & Hypothesis',
-    description: 'Real, unreal, and mixed conditional sentences',
-    icon: '❓',
-    topic: 'Conditional Clauses and Hypothesis',
-    unitTitle: 'Grammar Mastery',
-  },
-  {
-    id: 'idioms-expressions',
-    title: 'Idiomatic Expressions',
-    description: 'High-frequency idioms used by native speakers',
-    icon: '💬',
-    topic: 'Idiomatic Expressions and Phrasal Verbs',
-    unitTitle: 'Vocabulary & Style',
-  },
-  {
-    id: 'passive-voice',
-    title: 'Passive Voice Variations',
-    description: 'Passive constructions across tenses and registers',
-    icon: '🔄',
-    topic: 'Passive Voice Variations',
-    unitTitle: 'Grammar Mastery',
-  },
-  {
-    id: 'discourse-markers',
-    title: 'Discourse Markers',
-    description: 'Linking ideas clearly in spoken and written text',
-    icon: '📝',
-    topic: 'Discourse Markers and Cohesive Devices',
-    unitTitle: 'Academic Writing',
-  },
-  {
-    id: 'register-formality',
-    title: 'Register & Formality',
-    description: 'Switching between formal, informal, and neutral register',
-    icon: '🎩',
-    topic: 'Register and Formality',
-    unitTitle: 'Vocabulary & Style',
-  },
-];
-
-// ─── Infinite lesson topic pools ─────────────────────────────────────────
+import type {
+  CourseRoadmap,
+  LessonDefinition,
+  LessonKind,
+  RoadmapUnitDefinition,
+} from '@/types/lesson';
+import type { CEFRLevel, SupportedLanguage } from '@/types/user';
 
 const TOPIC_ICONS: Record<string, string> = {
   'Travel & Culture': '✈️',
   'Work & Career': '💼',
   'Health & Wellbeing': '🏃',
-  'Technology': '💻',
-  'Environment': '🌍',
+  Technology: '💻',
+  Environment: '🌍',
   'Social Issues': '🤝',
-  'Education': '📚',
+  Education: '📚',
   'Food & Cuisine': '🍽️',
-  'Entertainment': '🎬',
-  'Relationships': '❤️',
+  Entertainment: '🎬',
+  Relationships: '❤️',
   'Politics & Governance': '🏛️',
   'Philosophy & Ethics': '🤔',
-  'Science': '🔬',
+  Science: '🔬',
   'Art & Literature': '🎨',
-  'Economics': '📈',
+  Economics: '📈',
   'Law & Justice': '⚖️',
-  'Psychology': '🧠',
+  Psychology: '🧠',
   'Media & Journalism': '📰',
-  'History': '📜',
-  'Innovation': '💡',
+  History: '📜',
+  Innovation: '💡',
   'Rhetoric & Persuasion': '🎤',
   'Literary Analysis': '📖',
-  'Linguistics': '🔤',
+  Linguistics: '🔤',
   'Cultural Criticism': '🎭',
   'Academic Discourse': '🎓',
   'Satire & Irony': '😏',
   'Diplomatic Language': '🌐',
   'Regional Dialects': '🗣️',
-  'Etymology': '🔠',
+  Etymology: '🔠',
   'Translation Theory': '🔄',
+};
+
+const LESSON_KIND_META: Record<LessonKind, { icon: string; focusLabel: string }> = {
+  new_vocabulary: { icon: '🧩', focusLabel: 'New words' },
+  new_grammar: { icon: '📘', focusLabel: 'Grammar' },
+  skill_practice: { icon: '🎯', focusLabel: 'Practice' },
+  review: { icon: '🔁', focusLabel: 'Review' },
 };
 
 const UNIT_BY_TOPIC: Record<string, string> = {
   'Travel & Culture': 'Real World',
   'Work & Career': 'Real World',
   'Health & Wellbeing': 'Real World',
-  'Technology': 'Real World',
-  'Environment': 'Real World',
+  Technology: 'Real World',
+  Environment: 'Real World',
   'Social Issues': 'Society',
-  'Education': 'Society',
+  Education: 'Society',
   'Food & Cuisine': 'Real World',
-  'Entertainment': 'Real World',
-  'Relationships': 'Real World',
+  Entertainment: 'Real World',
+  Relationships: 'Real World',
   'Politics & Governance': 'Society',
   'Philosophy & Ethics': 'Advanced Thinking',
-  'Science': 'Advanced Thinking',
+  Science: 'Advanced Thinking',
   'Art & Literature': 'Culture',
-  'Economics': 'Society',
+  Economics: 'Society',
   'Law & Justice': 'Society',
-  'Psychology': 'Advanced Thinking',
+  Psychology: 'Advanced Thinking',
   'Media & Journalism': 'Culture',
-  'History': 'Culture',
-  'Innovation': 'Advanced Thinking',
+  History: 'Culture',
+  Innovation: 'Advanced Thinking',
   'Rhetoric & Persuasion': 'Mastery',
   'Literary Analysis': 'Mastery',
-  'Linguistics': 'Mastery',
+  Linguistics: 'Mastery',
   'Cultural Criticism': 'Mastery',
   'Academic Discourse': 'Mastery',
   'Satire & Irony': 'Mastery',
   'Diplomatic Language': 'Mastery',
   'Regional Dialects': 'Mastery',
-  'Etymology': 'Mastery',
+  Etymology: 'Mastery',
   'Translation Theory': 'Mastery',
 };
 
-export const TOPIC_POOLS: Record<CEFRLevel, string[]> = {
-  B1: ['Travel & Culture', 'Work & Career', 'Health & Wellbeing', 'Technology',
-       'Environment', 'Social Issues', 'Education', 'Food & Cuisine',
-       'Entertainment', 'Relationships'],
-  B2: ['Travel & Culture', 'Work & Career', 'Health & Wellbeing', 'Technology',
-       'Environment', 'Social Issues', 'Education', 'Food & Cuisine',
-       'Entertainment', 'Relationships'],
-  C1: ['Politics & Governance', 'Philosophy & Ethics', 'Science', 'Art & Literature',
-       'Economics', 'Law & Justice', 'Psychology', 'Media & Journalism',
-       'History', 'Innovation'],
-  C2: ['Rhetoric & Persuasion', 'Literary Analysis', 'Linguistics', 'Cultural Criticism',
-       'Academic Discourse', 'Satire & Irony', 'Diplomatic Language', 'Regional Dialects',
-       'Etymology', 'Translation Theory'],
+const GRAMMAR_POOLS: Record<CEFRLevel, string[]> = {
+  B1: [
+    'past vs present narration',
+    'modal verbs for obligation',
+    'future plans and intentions',
+    'comparatives and intensifiers',
+    'pronoun placement',
+  ],
+  B2: [
+    'conditionals and hypothesis',
+    'subjunctive triggers',
+    'relative clauses',
+    'passive voice',
+    'discourse markers',
+    'register shifts',
+  ],
+  C1: [
+    'hedging and stance markers',
+    'advanced connectors',
+    'reported speech nuance',
+    'nominalization',
+    'inversion for emphasis',
+    'precision with aspect',
+  ],
+  C2: [
+    'rhetorical inversion',
+    'register-sensitive ellipsis',
+    'subtle mood choices',
+    'literary sentence rhythm',
+    'advanced clause compression',
+    'discourse-level cohesion',
+  ],
 };
 
-/**
- * Generates up to `count` new LessonDefinition objects from the topic pool
- * for the given CEFR level, skipping any topics already used in `existingTopics`.
- */
-export function generateMoreLessons(
-  existingTopics: string[],
-  level: CEFRLevel,
-  count = 3,
-  titleOverrides?: Record<string, string>,
-): LessonDefinition[] {
-  const pool = TOPIC_POOLS[level] ?? TOPIC_POOLS.B2;
-  const used = new Set(existingTopics);
-  const available = pool.filter((t) => !used.has(t));
+const VOCABULARY_POOLS: Record<CEFRLevel, string[]> = {
+  B1: ['everyday verbs', 'high-frequency nouns', 'time phrases', 'opinions', 'descriptions'],
+  B2: ['collocations', 'abstract nouns', 'workplace phrases', 'discussion language', 'connectors'],
+  C1: ['nuanced synonyms', 'formal phrasing', 'idiomatic bundles', 'stance verbs', 'precision verbs'],
+  C2: ['literary phrasing', 'rhetorical vocabulary', 'rare collocations', 'subtle contrasts', 'register cues'],
+};
 
-  // Cycle back to beginning if all topics used
-  const source = available.length >= count ? available : [...available, ...pool];
+export const TOPIC_POOLS: Record<CEFRLevel, string[]> = {
+  B1: [
+    'Travel & Culture',
+    'Work & Career',
+    'Health & Wellbeing',
+    'Technology',
+    'Environment',
+    'Social Issues',
+    'Education',
+    'Food & Cuisine',
+    'Entertainment',
+    'Relationships',
+  ],
+  B2: [
+    'Travel & Culture',
+    'Work & Career',
+    'Health & Wellbeing',
+    'Technology',
+    'Environment',
+    'Social Issues',
+    'Education',
+    'Food & Cuisine',
+    'Entertainment',
+    'Relationships',
+  ],
+  C1: [
+    'Politics & Governance',
+    'Philosophy & Ethics',
+    'Science',
+    'Art & Literature',
+    'Economics',
+    'Law & Justice',
+    'Psychology',
+    'Media & Journalism',
+    'History',
+    'Innovation',
+  ],
+  C2: [
+    'Rhetoric & Persuasion',
+    'Literary Analysis',
+    'Linguistics',
+    'Cultural Criticism',
+    'Academic Discourse',
+    'Satire & Irony',
+    'Diplomatic Language',
+    'Regional Dialects',
+    'Etymology',
+    'Translation Theory',
+  ],
+};
 
-  const result: LessonDefinition[] = [];
-  for (let i = 0; i < Math.min(count, source.length); i++) {
-    const topic = source[i % source.length];
-    const id = `generated-${topic.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
-    result.push({
-      id,
-      title: titleOverrides?.[topic] ?? topic,
-      description: `Vocabulary and expressions for ${topic.toLowerCase()}`,
-      icon: TOPIC_ICONS[topic] ?? '📖',
-      topic,
-      unitTitle: UNIT_BY_TOPIC[topic] ?? 'Advanced Topics',
-    });
-  }
-  return result;
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────
+function lessonIcon(kind: LessonKind, topic: string): string {
+  if (kind === 'review') return LESSON_KIND_META.review.icon;
+  if (kind === 'skill_practice') return LESSON_KIND_META.skill_practice.icon;
+  if (kind === 'new_grammar') return LESSON_KIND_META.new_grammar.icon;
+  return TOPIC_ICONS[topic] ?? LESSON_KIND_META.new_vocabulary.icon;
+}
 
-/** CEFR level one step above the given level (caps at C2). */
+export function getTopicIcon(topic: string): string {
+  return TOPIC_ICONS[topic] ?? '📚';
+}
+
+function grammarFocusFor(level: CEFRLevel, unitIndex: number): string[] {
+  const pool = GRAMMAR_POOLS[level];
+  return [pool[unitIndex % pool.length], pool[(unitIndex + 2) % pool.length]];
+}
+
+function vocabularyFocusFor(level: CEFRLevel, topic: string, unitIndex: number): string[] {
+  const pool = VOCABULARY_POOLS[level];
+  return [
+    topic.toLowerCase(),
+    pool[unitIndex % pool.length],
+    pool[(unitIndex + 2) % pool.length],
+  ];
+}
+
+function canDoStatements(topic: string): string[] {
+  return [
+    `Talk about ${topic.toLowerCase()} with more natural phrasing.`,
+    `Ask follow-up questions and respond with detail.`,
+    'Recycle the same ideas in short review rounds.',
+  ];
+}
+
+function buildFallbackUnit(
+  topic: string,
+  unitIndex: number,
+  level: CEFRLevel,
+): { unit: RoadmapUnitDefinition; lessons: LessonDefinition[] } {
+  const unitId = `unit-${unitIndex + 1}-${slugify(topic)}`;
+  const grammarFocus = grammarFocusFor(level, unitIndex);
+  const vocabularyFocus = vocabularyFocusFor(level, topic, unitIndex);
+  const canDo = canDoStatements(topic);
+  const unitTitle = `Unit ${unitIndex + 1}: ${topic}`;
+  const unitIcon = TOPIC_ICONS[topic] ?? '📚';
+
+  const lessons: LessonDefinition[] = [
+    {
+      id: `${unitId}-vocab`,
+      unitId,
+      unitTitle,
+      unitIndex,
+      lessonIndex: 0,
+      title: `${topic.split('&')[0].trim()} Words`,
+      description: `Learn the core vocabulary for ${topic.toLowerCase()}.`,
+      icon: lessonIcon('new_vocabulary', topic),
+      topic,
+      lessonKind: 'new_vocabulary',
+      skillType: 'vocabulary',
+      focusLabel: LESSON_KIND_META.new_vocabulary.focusLabel,
+      objective: `Pick up the words and phrases you need to talk about ${topic.toLowerCase()}.`,
+      grammarFocus,
+      vocabularyFocus,
+      canDo,
+    },
+    {
+      id: `${unitId}-grammar`,
+      unitId,
+      unitTitle,
+      unitIndex,
+      lessonIndex: 1,
+      title: `Grammar: ${grammarFocus[0]}`,
+      description: `Use ${grammarFocus[0]} naturally inside the same topic.`,
+      icon: lessonIcon('new_grammar', topic),
+      topic: `${topic} with ${grammarFocus[0]}`,
+      lessonKind: 'new_grammar',
+      skillType: 'grammar',
+      focusLabel: LESSON_KIND_META.new_grammar.focusLabel,
+      objective: `Practice ${grammarFocus[0]} with ${topic.toLowerCase()} examples.`,
+      grammarFocus,
+      vocabularyFocus,
+      canDo,
+    },
+    {
+      id: `${unitId}-practice`,
+      unitId,
+      unitTitle,
+      unitIndex,
+      lessonIndex: 2,
+      title: `${topic.split('&')[0].trim()} Practice`,
+      description: 'Mix the new words and grammar into fast, focused drills.',
+      icon: lessonIcon('skill_practice', topic),
+      topic: `${topic} practice`,
+      lessonKind: 'skill_practice',
+      skillType: 'mixed',
+      focusLabel: LESSON_KIND_META.skill_practice.focusLabel,
+      objective: `Use the new material from ${topic.toLowerCase()} without hints.`,
+      grammarFocus,
+      vocabularyFocus,
+      canDo,
+    },
+    {
+      id: `${unitId}-review`,
+      unitId,
+      unitTitle,
+      unitIndex,
+      lessonIndex: 3,
+      title: `${topic.split('&')[0].trim()} Review`,
+      description: 'Review the unit before moving forward.',
+      icon: lessonIcon('review', topic),
+      topic: `${topic} review`,
+      lessonKind: 'review',
+      skillType: 'mixed',
+      focusLabel: LESSON_KIND_META.review.focusLabel,
+      objective: `Recall the vocabulary and patterns from this unit quickly and accurately.`,
+      grammarFocus,
+      vocabularyFocus,
+      canDo,
+    },
+  ];
+
+  return {
+    unit: {
+      id: unitId,
+      title: unitTitle,
+      description: `A Duolingo-style run through ${topic.toLowerCase()} with new words, grammar, practice, and review.`,
+      icon: unitIcon,
+      orderIndex: unitIndex,
+      theme: UNIT_BY_TOPIC[topic] ?? 'Advanced Topics',
+      level,
+      lessonIds: lessons.map((lesson) => lesson.id),
+      grammarFocus,
+      vocabularyFocus,
+      canDo,
+    },
+    lessons,
+  };
+}
+
+export function buildFallbackRoadmap(
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+): CourseRoadmap {
+  const topics = TOPIC_POOLS[level] ?? TOPIC_POOLS.B2;
+  const units = topics.slice(0, 10).map((topic, index) => buildFallbackUnit(topic, index, level));
+
+  return {
+    id: `fallback-${language}-${nativeLanguage}-${level}`,
+    title: `${level} Roadmap`,
+    summary: 'A fallback roadmap with clear unit goals, a short guidebook, and a vocabulary/grammar/review rhythm.',
+    language,
+    nativeLanguage,
+    level,
+    units: units.map((entry) => entry.unit),
+    lessons: units.flatMap((entry) => entry.lessons),
+    generatedAt: new Date(0).toISOString(),
+    expiresAt: null,
+    source: 'fallback',
+  };
+}
+
+const DEFAULT_ROADMAP = buildFallbackRoadmap('es', 'en', 'B2');
+
+export const LESSONS: LessonDefinition[] = DEFAULT_ROADMAP.lessons;
+
 const CEFR_LEVELS: CEFRLevel[] = ['B1', 'B2', 'C1', 'C2'];
 
 export function bumpLevel(level: CEFRLevel): CEFRLevel {
@@ -189,43 +350,38 @@ export function bumpLevel(level: CEFRLevel): CEFRLevel {
   return CEFR_LEVELS[Math.min(idx + 1, CEFR_LEVELS.length - 1)];
 }
 
-/**
- * Resolves a lesson ID to a LessonDefinition.
- *
- * Handled patterns beyond the static list:
- *  - `challenge-{lessonId}` → same lesson but one CEFR level higher
- *  - `practice-{lessonId}` → same as the base lesson (practice run)
- *  - `generated-{slug}` → look up in provided extra lessons array
- */
 export function getLessonById(
   id: string,
   userLevel?: CEFRLevel,
-  extraLessons: LessonDefinition[] = [],
+  lessons: LessonDefinition[] = LESSONS,
 ): LessonDefinition {
-  // Direct match (static or generated)
-  const all = [...LESSONS, ...extraLessons];
-  const found = all.find((l) => l.id === id);
+  const found = lessons.find((lesson) => lesson.id === id);
   if (found) return found;
 
-  // challenge-{lessonId}
   if (id.startsWith('challenge-')) {
     const baseId = id.slice('challenge-'.length);
-    const base = all.find((l) => l.id === baseId) ?? LESSONS[0];
+    const base = lessons.find((lesson) => lesson.id === baseId) ?? lessons[0];
     return {
       ...base,
       id,
       title: `⚡ ${base.title}`,
+      focusLabel: 'Challenge',
+      description: `A harder pass through ${base.title.toLowerCase()}.`,
       levelOverride: userLevel ? bumpLevel(userLevel) : 'C1',
     };
   }
 
-  // practice-{lessonId}
   if (id.startsWith('practice-')) {
     const baseId = id.slice('practice-'.length);
-    const base = all.find((l) => l.id === baseId) ?? LESSONS[0];
-    return { ...base, id };
+    const base = lessons.find((lesson) => lesson.id === baseId) ?? lessons[0];
+    return {
+      ...base,
+      id,
+      title: `Practice: ${base.title}`,
+      focusLabel: 'Practice',
+      description: `Redo ${base.title.toLowerCase()} with fresh exercises.`,
+    };
   }
 
-  // Fallback
-  return LESSONS[0];
+  return lessons[0];
 }

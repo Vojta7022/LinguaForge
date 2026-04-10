@@ -1,11 +1,13 @@
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { useLessonStore } from '@/stores/lessonStore';
 import { useGamificationStore } from '@/stores/gamificationStore';
 import { useUserStore } from '@/stores/userStore';
-import { getLessonById } from '@/utils/lessonData';
+import { buildFallbackRoadmap, getLessonById } from '@/utils/lessonData';
+
+const EMPTY_LESSONS: ReturnType<typeof buildFallbackRoadmap>['lessons'] = [];
 
 export default function LessonCompleteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -14,7 +16,17 @@ export default function LessonCompleteScreen() {
   const { awardXP, awardDailyGoalBonus, checkAndUpdateStreak,
     dailyGoalJustMet, streakMilestone, clearMilestone } = useGamificationStore();
   const { user, addXP, saveToDB, setUser } = useUserStore();
-  const lessonDef = getLessonById(id, user?.current_level);
+  const courseRoadmap = useLessonStore((s) => s.courseRoadmap);
+  const roadmapLessons = courseRoadmap?.lessons ?? EMPTY_LESSONS;
+  const fallbackLessons = useMemo(() => user
+    ? buildFallbackRoadmap(user.target_language, user.native_language, user.current_level).lessons
+    : EMPTY_LESSONS,
+  [user]);
+  const lessonDef = getLessonById(
+    id,
+    user?.current_level,
+    roadmapLessons.length > 0 ? roadmapLessons : fallbackLessons,
+  );
 
   const answered = session?.exercises_answered ?? 0;
   const correct = session?.exercises_correct ?? 0;

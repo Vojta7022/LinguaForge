@@ -40,7 +40,14 @@ export async function getCachedExercises(
   );
 
   if (rows.length === 0) return null;
-  return rows.map(parseExerciseRow);
+  const byId = new Map(rows.map((row) => {
+    const exercise = parseExerciseRow(row);
+    return [exercise.id, exercise] as const;
+  }));
+
+  return ids
+    .map((id) => byId.get(id))
+    .filter((exercise): exercise is Exercise => Boolean(exercise));
 }
 
 /**

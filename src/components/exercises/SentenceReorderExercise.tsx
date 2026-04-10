@@ -60,8 +60,11 @@ export default function SentenceReorderExercise({
   return (
     <View>
       {/* Instruction */}
+      <Text className="text-slate-500 text-sm font-semibold uppercase tracking-wide mb-2">
+        Tap the words in order
+      </Text>
       <Text className="text-slate-700 font-semibold text-base mb-3">
-        Arrange the words in {targetLangName}:
+        Build the sentence in {targetLangName}:
       </Text>
 
       {/* Native sentence context */}

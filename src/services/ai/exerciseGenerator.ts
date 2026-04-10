@@ -1,9 +1,15 @@
 import * as Network from 'expo-network';
 import type { ExerciseType, Exercise } from '@/types/exercise';
+import type { LessonDefinition } from '@/types/lesson';
 import type { CEFRLevel, SupportedLanguage } from '@/types/user';
 import { LANGUAGE_NAMES } from '@/types/user';
 import { DIFFICULTY_PARAMS } from './difficultyScaler';
-import { buildExercisePrompt, type ExerciseFocus } from './promptTemplates';
+import {
+  buildExercisePrompt,
+  buildLessonPrompt,
+  getLessonBlueprint,
+  type ExerciseFocus,
+} from './promptTemplates';
 import { parseAIBatch, extractContent, type AIExerciseRaw } from './responseSchemas';
 import { callGroqRaw } from './groqClient';
 import { callGeminiRaw } from './geminiClient';
@@ -126,6 +132,7 @@ function buildExercise(
   level: CEFRLevel,
   model: 'groq' | 'gemini',
   hash: string,
+  lessonId: string | null = null,
 ): Exercise {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 7 * 86_400_000).toISOString();
@@ -133,7 +140,7 @@ function buildExercise(
 
   return {
     id: Math.random().toString(36).slice(2) + Date.now().toString(36),
-    lesson_id: null,
+    lesson_id: lessonId,
     type: raw.type,
     content: extractContent(raw),
     difficulty_score: raw.difficulty_score ?? defaultScore,
@@ -206,6 +213,77 @@ async function attemptProvider(
   // Use validated exercises; fall back to unvalidated if nothing passed
   const toUse = validated.length > 0 ? validated : toValidate;
   return toUse.map((r) => buildExercise(r, language, nativeLanguage, level, model, hash));
+}
+
+function buildLessonPromptHash(
+  lesson: LessonDefinition,
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return djb2([
+    'lesson',
+    lesson.id,
+    language,
+    nativeLanguage,
+    level,
+    lesson.lessonKind,
+    lesson.skillType,
+    lesson.topic,
+    lesson.grammarFocus.join('|'),
+    lesson.vocabularyFocus.join('|'),
+    date,
+  ].join(':'));
+}
+
+function mapLessonSequence(
+  rawExercises: AIExerciseRaw[],
+  expectedSequence: ExerciseType[],
+): AIExerciseRaw[] | null {
+  const remaining = [...rawExercises];
+  const selected: AIExerciseRaw[] = [];
+
+  for (const expectedType of expectedSequence) {
+    const matchIndex = remaining.findIndex(
+      (exercise) => exercise.type === expectedType && validateExercise(exercise),
+    );
+    if (matchIndex === -1) {
+      return null;
+    }
+    selected.push(remaining[matchIndex]);
+    remaining.splice(matchIndex, 1);
+  }
+
+  return selected;
+}
+
+async function attemptLessonProvider(
+  caller: (system: string, user: string) => Promise<string>,
+  lesson: LessonDefinition,
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+  model: 'groq' | 'gemini',
+  hash: string,
+): Promise<Exercise[]> {
+  const { system, user, blueprint } = buildLessonPrompt(
+    lesson,
+    language,
+    nativeLanguage,
+    level,
+  );
+  const raw = await caller(system, user);
+  const parsed = parseAIBatch(raw);
+  const matchedSequence = mapLessonSequence(parsed, blueprint.sequence);
+
+  if (!matchedSequence || matchedSequence.length !== blueprint.sequence.length) {
+    throw new Error('Lesson response did not contain the required exercise sequence');
+  }
+
+  return matchedSequence.map((exercise) =>
+    buildExercise(exercise, language, nativeLanguage, level, model, hash, lesson.id),
+  );
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────
@@ -286,6 +364,76 @@ export async function generateExerciseBatch(
     'Unable to generate new exercises right now. ' +
     'Both AI providers failed, and cached exercises were skipped to avoid repeated content. ' +
     'Please wait a moment and try again.',
+  );
+}
+
+/**
+ * Generates a full lesson in one AI call using a Duolingo-style sequence of
+ * mixed exercise types. Reuses an exact same-day cache hit to cut Groq load
+ * when the learner reopens the same lesson.
+ */
+export async function generateLessonExercises(
+  lesson: LessonDefinition,
+  language: SupportedLanguage,
+  nativeLanguage: SupportedLanguage,
+  level: CEFRLevel,
+): Promise<Exercise[]> {
+  const hash = buildLessonPromptHash(lesson, language, nativeLanguage, level);
+  const blueprint = getLessonBlueprint(lesson.lessonKind);
+  const cached = await getCachedExercises(hash);
+  if (cached && cached.length >= blueprint.count) {
+    console.log('[AI] Lesson cache hit:', hash);
+    return cached.slice(0, blueprint.count);
+  }
+
+  const online = await isOnline();
+  if (!online) {
+    if (cached && cached.length > 0) {
+      return cached.slice(0, blueprint.count);
+    }
+    throw new Error(
+      'You are offline and this lesson has not been generated yet. Connect once to prepare the lesson.',
+    );
+  }
+
+  try {
+    const exercises = await attemptLessonProvider(
+      callGroqRaw,
+      lesson,
+      language,
+      nativeLanguage,
+      level,
+      'groq',
+      hash,
+    );
+    await saveExercises(exercises);
+    await storeExerciseBatch(hash, exercises);
+    console.log(`[AI] Groq lesson success: ${exercises.length} exercises`);
+    return exercises;
+  } catch (groqErr) {
+    console.warn('[AI] Groq lesson failed:', (groqErr as Error).message);
+  }
+
+  try {
+    const exercises = await attemptLessonProvider(
+      callGeminiRaw,
+      lesson,
+      language,
+      nativeLanguage,
+      level,
+      'gemini',
+      hash,
+    );
+    await saveExercises(exercises);
+    await storeExerciseBatch(hash, exercises);
+    console.log(`[AI] Gemini lesson success: ${exercises.length} exercises`);
+    return exercises;
+  } catch (geminiErr) {
+    console.warn('[AI] Gemini lesson failed:', (geminiErr as Error).message);
+  }
+
+  throw new Error(
+    'Unable to generate this lesson right now. Both AI providers failed before the full lesson could be assembled.',
   );
 }
 

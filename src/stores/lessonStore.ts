@@ -1,35 +1,50 @@
 import { create } from 'zustand';
-import type { Lesson, LessonSession, Unit } from '@/types/lesson';
-import type { LessonDefinition } from '@/utils/lessonData';
+import type { CourseRoadmap, LessonSession } from '@/types/lesson';
 
 interface LessonState {
-  units: Unit[];
-  lessons: Lesson[];
+  courseRoadmap: CourseRoadmap | null;
+  roadmapStatus: 'idle' | 'loading' | 'ready' | 'error';
+  roadmapError: string | null;
   activeSession: LessonSession | null;
   /** Lesson IDs completed this app session (persisted in SQLite in Phase 2) */
   completedLessonIds: string[];
   /** Per-lesson accuracy percentage (0–100) keyed by lesson id */
   lessonAccuracy: Record<string, number>;
-  /** AI-generated lessons appended beyond the static seed list */
-  generatedLessons: LessonDefinition[];
 
+  setCourseRoadmap: (roadmap: CourseRoadmap) => void;
+  setRoadmapStatus: (status: LessonState['roadmapStatus']) => void;
+  setRoadmapError: (error: string | null) => void;
   startSession: (lessonId: string, userId: string) => void;
   recordAnswer: (isCorrect: boolean) => void;
   addXP: (amount: number) => void;
   completeSession: () => void;
   markLessonComplete: (lessonId: string) => void;
   setLessonAccuracy: (lessonId: string, pct: number) => void;
-  addGeneratedLessons: (lessons: LessonDefinition[]) => void;
   loadUnitsAndLessons: (language: string) => Promise<void>;
 }
 
 export const useLessonStore = create<LessonState>((set, get) => ({
-  units: [],
-  lessons: [],
+  courseRoadmap: null,
+  roadmapStatus: 'idle',
+  roadmapError: null,
   activeSession: null,
   completedLessonIds: [],
   lessonAccuracy: {},
-  generatedLessons: [],
+
+  setCourseRoadmap: (courseRoadmap) =>
+    set({
+      courseRoadmap,
+      roadmapStatus: 'ready',
+      roadmapError: null,
+    }),
+
+  setRoadmapStatus: (roadmapStatus) => set({ roadmapStatus }),
+
+  setRoadmapError: (roadmapError) =>
+    set({
+      roadmapError,
+      roadmapStatus: roadmapError ? 'error' : get().roadmapStatus,
+    }),
 
   startSession: (lessonId, userId) =>
     set({
@@ -97,15 +112,6 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     set((state) => ({
       lessonAccuracy: { ...state.lessonAccuracy, [lessonId]: pct },
     })),
-
-  addGeneratedLessons: (lessons) =>
-    set((state) => {
-      const existingIds = new Set([
-        ...state.generatedLessons.map((l) => l.id),
-      ]);
-      const newOnes = lessons.filter((l) => !existingIds.has(l.id));
-      return { generatedLessons: [...state.generatedLessons, ...newOnes] };
-    }),
 
   loadUnitsAndLessons: async (_language) => {
     // TODO Phase 2: load from SQLite

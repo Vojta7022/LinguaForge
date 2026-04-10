@@ -86,6 +86,9 @@ export default function WordMatchExercise({ content, onComplete }: Props) {
 
   return (
     <View className="flex-1">
+      <Text className="text-slate-500 text-sm font-semibold uppercase tracking-wide mb-2">
+        Match the words
+      </Text>
       <Text className="text-slate-700 font-semibold text-base mb-1">Match the pairs</Text>
       <Text className="text-slate-400 text-xs mb-5">
         {matchedCount}/{total} matched · Tap one from each column

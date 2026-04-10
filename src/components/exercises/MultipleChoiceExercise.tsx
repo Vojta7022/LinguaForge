@@ -24,6 +24,10 @@ export default function MultipleChoiceExercise({
 
   return (
     <View className="flex-1">
+      <Text className="text-slate-500 text-sm font-semibold uppercase tracking-wide mb-3">
+        Choose the correct answer
+      </Text>
+
       {/* Question */}
       <Text className="text-slate-800 text-xl font-semibold leading-7 mb-6">
         {content.question}

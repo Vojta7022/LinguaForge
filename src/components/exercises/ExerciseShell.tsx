@@ -18,6 +18,7 @@ import WordBankTranslateExercise from './WordBankTranslateExercise';
 
 import type {
   Exercise,
+  ExerciseType,
   FillBlankContent,
   MultipleChoiceContent,
   SentenceReorderContent,
@@ -37,6 +38,20 @@ interface Props {
   onContinue: (isCorrect: boolean, answer: string, timeMs: number) => void;
   onClose: () => void;
 }
+
+const EXERCISE_LABELS: Record<ExerciseType, string> = {
+  FILL_BLANK: 'Complete the sentence',
+  SENTENCE_REORDER: 'Build the sentence',
+  TRANSLATE: 'Write the translation',
+  MULTIPLE_CHOICE: 'Pick the best answer',
+  ERROR_CORRECTION: 'Fix the mistake',
+  CLOZE: 'Fill the passage',
+  IDIOM_MATCH: 'Match the meanings',
+  CONTEXTUAL_VOCAB: 'Choose the right word',
+  LISTENING: 'Listen and choose',
+  WORD_MATCH: 'Match the pairs',
+  WORD_BANK_TRANSLATE: 'Tap the tiles',
+};
 
 export default function ExerciseShell({
   exercise,
@@ -111,7 +126,7 @@ export default function ExerciseShell({
     onContinue(isCorrect, selectedAnswer ?? '', Date.now() - startTimeRef.current);
   }
 
-  const typeLabel = exercise.type.replace(/_/g, ' ');
+  const typeLabel = EXERCISE_LABELS[exercise.type] ?? exercise.type.replace(/_/g, ' ');
   const progress = (currentIndex + 1) / totalCount;
   const bannerTitle = isCorrect
     ? (isClose ? '✓ Also acceptable!' : '✓ Correct!')
