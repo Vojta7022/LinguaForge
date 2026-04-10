@@ -26,9 +26,9 @@ LinguaForge dynamically generates exercises at B2–C2 difficulty using free AI 
 
 **Gamification** — XP system with difficulty multipliers, daily goals, streaks with freeze protection, and milestone achievements.
 
-**Offline-First** — Exercises are pre-generated and cached in SQLite. No internet? No problem — you keep learning from your cache.
+**Offline-First** — Fresh exercises are cached in SQLite after generation, so when you lose internet access you can keep learning from saved content.
 
-**Dual AI Fallback** — Groq is the primary engine. If it's unavailable, Gemini takes over. If both fail, cached exercises are served. You always have something to practice.
+**Dual AI Fallback** — Groq is the primary engine. If it's unavailable, Gemini takes over. While you're online, LinguaForge keeps trying for a fresh batch instead of repeating old exercises.
 
 **Infinite Lessons** — Complete all available lessons and new ones are auto-generated from curated topic pools. The path never ends.
 
@@ -168,9 +168,9 @@ src/
 User requests exercises
         │
         ▼
-┌─ Cache hit? ──── YES ──→ Return cached exercises (instant)
-│       │
-│      NO
+┌─ Online? ──────── NO ──→ Return today's cached batch
+│       │                 or stale cache if needed
+│      YES
 │       │
 │       ▼
 │   Try Groq API (LLaMA 3.3 70B)
@@ -185,11 +185,6 @@ User requests exercises
 │   Success? ── YES ──→ Validate with Zod → Cache → Return
 │       │
 │      NO
-│       │
-│       ▼
-│   Serve stale cache (if available)
-│       │
-│      NO cache at all
 │       │
 │       ▼
 └── Show friendly error + retry button

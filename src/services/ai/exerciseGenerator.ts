@@ -28,8 +28,8 @@ function djb2(str: string): string {
 }
 
 /**
- * Hash of type + language pair + level + topic + today's date.
- * Same request on the same day returns the same hash (cache hit).
+ * Hash of request shape + today's date.
+ * Cached batches should only match the exact offline request we made earlier today.
  */
 export function buildPromptHash(
   type: ExerciseType,
@@ -37,9 +37,11 @@ export function buildPromptHash(
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
   topic: string,
+  batchSize = BATCH_SIZE,
+  focus: ExerciseFocus = 'mixed',
 ): string {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return djb2(`${type}:${language}:${nativeLanguage}:${level}:${topic}:${date}`);
+  return djb2(`${type}:${language}:${nativeLanguage}:${level}:${topic}:${batchSize}:${focus}:${date}`);
 }
 
 // ─── Quality validation ────────────────────────────────────────────────────
@@ -194,7 +196,7 @@ async function attemptProvider(
   }
 
   // If more than 50% failed validation, treat this attempt as a failure so the
-  // caller falls through to the next provider (Groq → Gemini → stale cache)
+  // caller falls through to the next provider.
   if (toValidate.length > 0 && validated.length < toValidate.length / 2) {
     throw new Error(
       `Quality check failed: ${discardedCount}/${toValidate.length} exercises discarded — trying next provider`,
@@ -212,11 +214,10 @@ async function attemptProvider(
  * Main entry point for exercise generation.
  *
  * Priority chain:
- *   1. SQLite cache (exact hash, same-day)
- *   2. Groq (primary)
+ *   1. When offline: today's exact cache, then stale cache
+ *   2. When online: Groq (primary)
  *   3. Gemini (fallback)
- *   4. Stale SQLite cache (any age)
- *   5. Throws a user-friendly error
+ *   4. Throws a user-friendly error
  *
  * @param focus  'vocabulary' | 'grammar' | 'mixed' (default 'mixed' = 70% vocab / 30% grammar)
  */
@@ -229,18 +230,18 @@ export async function generateExerciseBatch(
   batchSize = BATCH_SIZE,
   focus: ExerciseFocus = 'mixed',
 ): Promise<Exercise[]> {
-  const hash = buildPromptHash(type, language, nativeLanguage, level, topic);
+  const hash = buildPromptHash(type, language, nativeLanguage, level, topic, batchSize, focus);
 
-  // 1. Fresh cache
-  const cached = await getCachedExercises(hash);
-  if (cached && cached.length > 0) {
-    console.log('[AI] Cache hit:', hash);
-    return cached;
-  }
-
-  // Skip API calls when offline
+  // Cached content is now an offline-only safety net. When online, always try
+  // to generate a fresh batch so users do not see repeated exercises.
   const online = await isOnline();
   if (!online) {
+    const cached = await getCachedExercises(hash);
+    if (cached && cached.length > 0) {
+      console.log('[AI] Offline cache hit:', hash);
+      return cached;
+    }
+
     console.warn('[AI] Offline — falling back to stale cache');
     const stale = await getStaleCachedExercises(type, language, level);
     if (stale.length > 0) return stale;
@@ -280,18 +281,11 @@ export async function generateExerciseBatch(
     console.warn('[AI] Gemini failed:', (geminiErr as Error).message);
   }
 
-  // 4. Stale cache
-  const stale = await getStaleCachedExercises(type, language, level);
-  if (stale.length > 0) {
-    console.warn('[AI] Using stale cache as last resort');
-    return stale;
-  }
-
-  // 5. Give up
+  // 4. Give up
   throw new Error(
-    'Unable to generate exercises right now. ' +
-    'Both AI providers failed and no cached exercises are available. ' +
-    'Please check your API keys and try again.',
+    'Unable to generate new exercises right now. ' +
+    'Both AI providers failed, and cached exercises were skipped to avoid repeated content. ' +
+    'Please wait a moment and try again.',
   );
 }
 

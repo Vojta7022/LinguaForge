@@ -5,6 +5,7 @@ const GEMINI_TIMEOUT_MS = 30_000;
 const GEMINI_MIN_GAP_MS = 4_000;
 
 let lastGeminiRequestAt = 0;
+let geminiQueue: Promise<void> = Promise.resolve();
 
 async function enforceRateLimit(): Promise<void> {
   const now = Date.now();
@@ -15,6 +16,12 @@ async function enforceRateLimit(): Promise<void> {
     );
   }
   lastGeminiRequestAt = Date.now();
+}
+
+function enqueueGeminiRequest<T>(task: () => Promise<T>): Promise<T> {
+  const run = geminiQueue.then(task);
+  geminiQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 async function fetchWithTimeout(
@@ -44,64 +51,66 @@ export async function callGeminiRaw(
     );
   }
 
-  await enforceRateLimit();
+  return enqueueGeminiRequest(async () => {
+    await enforceRateLimit();
 
-  let lastError: Error = new Error('Gemini: unknown error');
+    let lastError: Error = new Error('Gemini: unknown error');
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
-      await new Promise<void>((r) =>
-        setTimeout(r, Math.pow(2, attempt - 1) * 1_500),
-      );
-    }
-
-    const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-    let res: Response;
-    try {
-      res = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents: [{ parts: [{ text: user }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4096,
-            responseMimeType: 'application/json',
-          },
-        }),
-      });
-    } catch (fetchErr) {
-      if ((fetchErr as Error).name === 'AbortError') {
-        throw new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await new Promise<void>((r) =>
+          setTimeout(r, Math.pow(2, attempt - 1) * 1_500),
+        );
       }
-      throw fetchErr;
+
+      const url = `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+      let res: Response;
+      try {
+        res = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: [{ parts: [{ text: user }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 4096,
+              responseMimeType: 'application/json',
+            },
+          }),
+        });
+      } catch (fetchErr) {
+        if ((fetchErr as Error).name === 'AbortError') {
+          throw new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+        }
+        throw fetchErr;
+      }
+
+      if (res.status === 429) {
+        lastError = new Error('Gemini rate limit exceeded (429)');
+        continue;
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Gemini API error ${res.status}: ${body}`);
+      }
+
+      const data = (await res.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+      };
+
+      const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!content || content.trim() === '') {
+        throw new Error('Gemini returned empty content');
+      }
+
+      return content;
     }
 
-    if (res.status === 429) {
-      lastError = new Error('Gemini rate limit exceeded (429)');
-      continue;
-    }
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Gemini API error ${res.status}: ${body}`);
-    }
-
-    const data = (await res.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!content || content.trim() === '') {
-      throw new Error('Gemini returned empty content');
-    }
-
-    return content;
-  }
-
-  throw lastError;
+    throw lastError;
+  });
 }

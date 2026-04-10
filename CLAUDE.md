@@ -39,10 +39,10 @@ Three-layer: **UI → Zustand stores → Services**
 ```
 
 ### AI Engine Priority Queue
-Request flow: **Groq → Gemini fallback → SQLite cache → stale cache**
+Request flow: **Online: Groq → Gemini fallback → error | Offline: SQLite cache → stale cache**
 - 2000ms minimum gap between Groq requests
 - 4000ms minimum gap between Gemini requests
-- Three-tier caching: exact prompt-hash hit → batch over-generation of 10 → background WiFi prefetch
+- Cache is reserved for offline resilience; online requests should prefer fresh generation
 - Expected: 5–15 Groq calls/user/day (vs. 14,400/day free limit)
 
 ### Offline Strategy
