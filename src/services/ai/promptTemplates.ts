@@ -549,6 +549,9 @@ Return this exact JSON structure:
 Requirements:
 - Exactly ${unitCount} units.
 - Exactly 4 lessons per unit.
+- Every lesson must include at least 1 item in grammar_focus and at least 1 item in vocabulary_focus.
+- If a lesson is mainly vocabulary, repeat the supporting grammar focus from the unit instead of leaving grammar_focus empty.
+- If a lesson is mainly grammar, repeat the supporting vocabulary set from the unit instead of leaving vocabulary_focus empty.
 - Titles should be concise: 2-5 words for lessons, 2-6 words for units.
 - "review" lessons must explicitly avoid introducing new material.
 - The roadmap must feel cumulative from Unit 1 through Unit ${unitCount}.
@@ -617,6 +620,7 @@ Hard rules:
 - Do not repeat the exact same sentence pattern twice.
 - difficulty_score must stay appropriate for ${level}.
 - Every correct answer must be present in the choices/tiles for that exercise.
+- why_wrong and distractor_reasons must be JSON OBJECTS keyed by option text, never arrays.
 - Return JSON only.`,
     blueprint,
   };

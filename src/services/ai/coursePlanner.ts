@@ -31,6 +31,8 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+const roadmapInFlight = new Map<string, Promise<CourseRoadmap>>();
+
 async function isOnline(): Promise<boolean> {
   try {
     const state = await Network.getNetworkStateAsync();
@@ -48,48 +50,76 @@ function buildRoadmapFromAI(
   cacheKey: string,
 ): CourseRoadmap {
   const parsed = parseRoadmapResponse(raw);
+  const fallbackRoadmap = buildFallbackRoadmap(language, nativeLanguage, level);
   const generatedAt = new Date().toISOString();
+  const units = fallbackRoadmap.units.map((fallbackUnit, unitIndex) => {
+    const rawUnit = parsed.units[unitIndex];
+    const fallbackLessons = fallbackRoadmap.lessons.filter(
+      (lesson) => lesson.unitId === fallbackUnit.id,
+    );
 
-  const units = parsed.units.map((unit, unitIndex) => {
-    const unitId = `unit-${unitIndex + 1}-${slugify(unit.title)}`;
-    const lessons = unit.lessons.map((lesson, lessonIndex) => ({
-      id: `${unitId}-lesson-${lessonIndex + 1}`,
-      unitId,
-      unitTitle: unit.title,
-      unitIndex,
-      lessonIndex,
-      title: lesson.title,
-      description: lesson.description,
-      icon: lesson.lesson_kind === 'new_vocabulary'
-        ? getTopicIcon(lesson.topic)
-        : lesson.lesson_kind === 'new_grammar'
-        ? '📘'
-        : lesson.lesson_kind === 'skill_practice'
-        ? '🎯'
-        : '🔁',
-      topic: lesson.topic,
-      lessonKind: lesson.lesson_kind,
-      skillType: lesson.skill_type,
-      focusLabel: lesson.focus_label,
-      objective: lesson.objective,
-      grammarFocus: lesson.grammar_focus,
-      vocabularyFocus: lesson.vocabulary_focus,
-      canDo: unit.can_do,
-    }));
+    const unitTitle = rawUnit?.title || fallbackUnit.title;
+    const unitDescription = rawUnit?.description || fallbackUnit.description;
+    const unitTheme = rawUnit?.theme || fallbackUnit.theme;
+    const unitGrammarFocus = rawUnit?.grammar_focus.length
+      ? rawUnit.grammar_focus
+      : fallbackUnit.grammarFocus;
+    const unitVocabularyFocus = rawUnit?.vocabulary_focus.length
+      ? rawUnit.vocabulary_focus
+      : fallbackUnit.vocabularyFocus;
+    const unitCanDo = rawUnit?.can_do.length
+      ? rawUnit.can_do
+      : fallbackUnit.canDo;
+
+    const lessons = fallbackLessons.map((fallbackLesson, lessonIndex) => {
+      const rawLesson = rawUnit?.lessons[lessonIndex];
+      const topic = rawLesson?.topic || fallbackLesson.topic;
+      const lessonKind = rawLesson?.lesson_kind || fallbackLesson.lessonKind;
+      const grammarFocus = rawLesson?.grammar_focus.length
+        ? rawLesson.grammar_focus
+        : lessonKind === 'new_vocabulary'
+        ? fallbackLesson.grammarFocus
+        : unitGrammarFocus;
+      const vocabularyFocus = rawLesson?.vocabulary_focus.length
+        ? rawLesson.vocabulary_focus
+        : lessonKind === 'new_grammar'
+        ? fallbackLesson.vocabularyFocus
+        : unitVocabularyFocus;
+
+      return {
+        ...fallbackLesson,
+        unitTitle,
+        title: rawLesson?.title || fallbackLesson.title,
+        description: rawLesson?.description || fallbackLesson.description,
+        icon: lessonKind === 'new_vocabulary'
+          ? getTopicIcon(topic)
+          : lessonKind === 'new_grammar'
+          ? '📘'
+          : lessonKind === 'skill_practice'
+          ? '🎯'
+          : '🔁',
+        topic,
+        lessonKind,
+        skillType: rawLesson?.skill_type || fallbackLesson.skillType,
+        focusLabel: rawLesson?.focus_label || fallbackLesson.focusLabel,
+        objective: rawLesson?.objective || fallbackLesson.objective,
+        grammarFocus,
+        vocabularyFocus,
+        canDo: unitCanDo,
+      };
+    });
 
     return {
       unit: {
-        id: unitId,
-        title: unit.title,
-        description: unit.description,
-        icon: getTopicIcon(unit.title),
-        orderIndex: unitIndex,
-        theme: unit.theme,
-        level,
+        ...fallbackUnit,
+        title: unitTitle,
+        description: unitDescription,
+        icon: getTopicIcon(rawUnit?.theme || rawUnit?.title || fallbackUnit.title),
+        theme: unitTheme || fallbackUnit.theme,
+        grammarFocus: unitGrammarFocus,
+        vocabularyFocus: unitVocabularyFocus,
+        canDo: unitCanDo,
         lessonIds: lessons.map((lesson) => lesson.id),
-        grammarFocus: unit.grammar_focus,
-        vocabularyFocus: unit.vocabulary_focus,
-        canDo: unit.can_do,
       },
       lessons,
     };
@@ -97,8 +127,8 @@ function buildRoadmapFromAI(
 
   return {
     id: `roadmap-${cacheKey}`,
-    title: parsed.title,
-    summary: parsed.summary,
+    title: parsed.title || fallbackRoadmap.title,
+    summary: parsed.summary || fallbackRoadmap.summary,
     language,
     nativeLanguage,
     level,
@@ -131,6 +161,10 @@ export async function ensureCourseRoadmap(
   const cached = await getCachedRoadmap(cacheKey);
   if (cached) return cached;
 
+  const existing = roadmapInFlight.get(cacheKey);
+  if (existing) return existing;
+
+  const request = (async (): Promise<CourseRoadmap> => {
   if (!(await isOnline())) {
     return buildFallbackRoadmap(language, nativeLanguage, level);
   }
@@ -152,4 +186,12 @@ export async function ensureCourseRoadmap(
   }
 
   return buildFallbackRoadmap(language, nativeLanguage, level);
+  })();
+
+  roadmapInFlight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    roadmapInFlight.delete(cacheKey);
+  }
 }

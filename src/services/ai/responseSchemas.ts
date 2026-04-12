@@ -1,6 +1,134 @@
 import { z } from 'zod';
 import type { ExerciseContent } from '@/types/exercise';
 
+function normalizeExerciseType(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return value.trim().toUpperCase().replace(/[\s-]+/g, '_');
+}
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item : String(item ?? '')))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n|]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function toReasonRecord(value: unknown): Record<string, string> | undefined {
+  if (!value) return undefined;
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, reason]) => [key.trim(), String(reason ?? '').trim()] as const)
+      .filter(([key, reason]) => key.length > 0 && reason.length > 0);
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  }
+
+  if (!Array.isArray(value)) return undefined;
+
+  const entries = value.flatMap((item): Array<[string, string]> => {
+    if (typeof item === 'string') {
+      const parts = item.split(/[:|-]/);
+      if (parts.length >= 2) {
+        const [key, ...rest] = parts;
+        const reason = rest.join(':').trim();
+        return key.trim() && reason ? [[key.trim(), reason]] : [];
+      }
+      return [];
+    }
+
+    if (item && typeof item === 'object') {
+      const record = item as Record<string, unknown>;
+      const key =
+        record.option ?? record.word ?? record.key ?? record.answer ?? record.text ?? record.choice;
+      const reason =
+        record.reason ?? record.explanation ?? record.value ?? record.message ?? record.why;
+
+      if (typeof key === 'string' && typeof reason === 'string' && key.trim() && reason.trim()) {
+        return [[key.trim(), reason.trim()]];
+      }
+    }
+
+    return [];
+  });
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeExerciseItem(item: unknown): unknown {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+
+  const record = { ...(item as Record<string, unknown>) };
+  record.type = normalizeExerciseType(record.type);
+  if (typeof record.correct_index === 'string' && /^\d+$/.test(record.correct_index)) {
+    record.correct_index = Number(record.correct_index);
+  }
+  if (typeof record.difficulty_score === 'string' && /^\d+$/.test(record.difficulty_score)) {
+    record.difficulty_score = Number(record.difficulty_score);
+  }
+
+  if (record.type === 'FILL_BLANK') {
+    record.acceptable_answers = toStringArray(record.acceptable_answers);
+    if (
+      (!Array.isArray(record.acceptable_answers) || record.acceptable_answers.length === 0) &&
+      typeof record.correct_answer === 'string'
+    ) {
+      record.acceptable_answers = [record.correct_answer];
+    }
+    const distractorReasons = toReasonRecord(record.distractor_reasons);
+    if (distractorReasons) record.distractor_reasons = distractorReasons;
+    else delete record.distractor_reasons;
+  }
+
+  if (record.type === 'MULTIPLE_CHOICE') {
+    const whyWrong = toReasonRecord(record.why_wrong);
+    if (whyWrong) record.why_wrong = whyWrong;
+    else delete record.why_wrong;
+  }
+
+  if (record.type === 'TRANSLATE') {
+    record.acceptable_translations = toStringArray(record.acceptable_translations);
+    if (
+      (!Array.isArray(record.acceptable_translations) || record.acceptable_translations.length === 0) &&
+      typeof record.reference_translation === 'string'
+    ) {
+      record.acceptable_translations = [record.reference_translation];
+    }
+    record.key_words = toStringArray(record.key_words);
+  }
+
+  if (record.type === 'WORD_BANK_TRANSLATE') {
+    record.translated_words = toStringArray(record.translated_words);
+    record.distractor_words = toStringArray(record.distractor_words);
+  }
+
+  if (record.type === 'SENTENCE_REORDER') {
+    record.words = toStringArray(record.words);
+  }
+
+  if (record.type === 'WORD_MATCH' && Array.isArray(record.pairs)) {
+    record.pairs = record.pairs
+      .filter((pair) => pair && typeof pair === 'object')
+      .map((pair) => ({
+        target: String((pair as Record<string, unknown>).target ?? '').trim(),
+        native: String((pair as Record<string, unknown>).native ?? '').trim(),
+      }))
+      .filter((pair) => pair.target.length > 0 && pair.native.length > 0);
+  }
+
+  return record;
+}
+
 // ─── Core content schemas ──────────────────────────────────────────────────
 
 export const FillBlankSchema = z.object({
@@ -8,7 +136,7 @@ export const FillBlankSchema = z.object({
   sentence: z.string().min(5),
   word_bank: z.array(z.string()).min(2).max(8),
   correct_answer: z.string().min(1),
-  acceptable_answers: z.array(z.string()),
+  acceptable_answers: z.array(z.string()).min(1),
   grammar_hint: z.string().optional(),
   distractor_reasons: z.record(z.string(), z.string()).optional(),
 });
@@ -26,7 +154,7 @@ export const TranslateSchema = z.object({
   source_text: z.string().min(5),
   source_language: z.string(),
   reference_translation: z.string().min(3),
-  acceptable_translations: z.array(z.string()),
+  acceptable_translations: z.array(z.string()).min(1),
   key_words: z.array(z.string()).optional(),
   context_note: z.string().optional(),
 });
@@ -174,7 +302,7 @@ export function parseAIBatch(raw: string): AIExerciseRaw[] {
 
   const valid: AIExerciseRaw[] = [];
   for (const [i, item] of outer.data.exercises.entries()) {
-    const result = AIExerciseSchema.safeParse(item);
+    const result = AIExerciseSchema.safeParse(normalizeExerciseItem(item));
     if (result.success) {
       valid.push(result.data);
     } else {

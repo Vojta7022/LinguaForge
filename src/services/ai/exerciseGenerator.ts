@@ -21,6 +21,15 @@ import {
 import { saveExercises } from '@/repositories/exerciseRepository';
 
 const BATCH_SIZE = 10;
+const SUPPORTED_LESSON_TYPES = new Set<ExerciseType>([
+  'FILL_BLANK',
+  'MULTIPLE_CHOICE',
+  'TRANSLATE',
+  'WORD_MATCH',
+  'WORD_BANK_TRANSLATE',
+  'SENTENCE_REORDER',
+]);
+const lessonInFlight = new Map<string, Promise<Exercise[]>>();
 
 // ─── Prompt hash ──────────────────────────────────────────────────────────
 
@@ -258,6 +267,21 @@ function mapLessonSequence(
   return selected;
 }
 
+function selectFallbackLessonExercises(
+  rawExercises: AIExerciseRaw[],
+  count: number,
+): AIExerciseRaw[] | null {
+  const supported = rawExercises.filter(
+    (exercise) => SUPPORTED_LESSON_TYPES.has(exercise.type) && validateExercise(exercise),
+  );
+
+  if (supported.length < Math.max(6, count - 2)) {
+    return null;
+  }
+
+  return supported.slice(0, count);
+}
+
 async function attemptLessonProvider(
   caller: (system: string, user: string) => Promise<string>,
   lesson: LessonDefinition,
@@ -276,12 +300,17 @@ async function attemptLessonProvider(
   const raw = await caller(system, user);
   const parsed = parseAIBatch(raw);
   const matchedSequence = mapLessonSequence(parsed, blueprint.sequence);
+  const selectedExercises = matchedSequence ?? selectFallbackLessonExercises(parsed, blueprint.count);
 
-  if (!matchedSequence || matchedSequence.length !== blueprint.sequence.length) {
-    throw new Error('Lesson response did not contain the required exercise sequence');
+  if (!selectedExercises || selectedExercises.length < Math.max(6, blueprint.count - 2)) {
+    throw new Error('Lesson response did not contain enough usable exercises');
   }
 
-  return matchedSequence.map((exercise) =>
+  if (!matchedSequence) {
+    console.warn('[AI] Lesson sequence degraded — using best available validated exercises');
+  }
+
+  return selectedExercises.map((exercise) =>
     buildExercise(exercise, language, nativeLanguage, level, model, hash, lesson.id),
   );
 }
@@ -380,6 +409,9 @@ export async function generateLessonExercises(
 ): Promise<Exercise[]> {
   const hash = buildLessonPromptHash(lesson, language, nativeLanguage, level);
   const blueprint = getLessonBlueprint(lesson.lessonKind);
+  const existing = lessonInFlight.get(hash);
+  if (existing) return existing;
+
   const cached = await getCachedExercises(hash);
   if (cached && cached.length >= blueprint.count) {
     console.log('[AI] Lesson cache hit:', hash);
@@ -396,45 +428,54 @@ export async function generateLessonExercises(
     );
   }
 
-  try {
-    const exercises = await attemptLessonProvider(
-      callGroqRaw,
-      lesson,
-      language,
-      nativeLanguage,
-      level,
-      'groq',
-      hash,
-    );
-    await saveExercises(exercises);
-    await storeExerciseBatch(hash, exercises);
-    console.log(`[AI] Groq lesson success: ${exercises.length} exercises`);
-    return exercises;
-  } catch (groqErr) {
-    console.warn('[AI] Groq lesson failed:', (groqErr as Error).message);
-  }
+  const request = (async (): Promise<Exercise[]> => {
+    try {
+      const exercises = await attemptLessonProvider(
+        callGroqRaw,
+        lesson,
+        language,
+        nativeLanguage,
+        level,
+        'groq',
+        hash,
+      );
+      await saveExercises(exercises);
+      await storeExerciseBatch(hash, exercises);
+      console.log(`[AI] Groq lesson success: ${exercises.length} exercises`);
+      return exercises;
+    } catch (groqErr) {
+      console.warn('[AI] Groq lesson failed:', (groqErr as Error).message);
+    }
 
-  try {
-    const exercises = await attemptLessonProvider(
-      callGeminiRaw,
-      lesson,
-      language,
-      nativeLanguage,
-      level,
-      'gemini',
-      hash,
-    );
-    await saveExercises(exercises);
-    await storeExerciseBatch(hash, exercises);
-    console.log(`[AI] Gemini lesson success: ${exercises.length} exercises`);
-    return exercises;
-  } catch (geminiErr) {
-    console.warn('[AI] Gemini lesson failed:', (geminiErr as Error).message);
-  }
+    try {
+      const exercises = await attemptLessonProvider(
+        callGeminiRaw,
+        lesson,
+        language,
+        nativeLanguage,
+        level,
+        'gemini',
+        hash,
+      );
+      await saveExercises(exercises);
+      await storeExerciseBatch(hash, exercises);
+      console.log(`[AI] Gemini lesson success: ${exercises.length} exercises`);
+      return exercises;
+    } catch (geminiErr) {
+      console.warn('[AI] Gemini lesson failed:', (geminiErr as Error).message);
+    }
 
-  throw new Error(
-    'Unable to generate this lesson right now. Both AI providers failed before the full lesson could be assembled.',
-  );
+    throw new Error(
+      'Unable to generate this lesson right now. Both AI providers failed before the full lesson could be assembled.',
+    );
+  })();
+
+  lessonInFlight.set(hash, request);
+  try {
+    return await request;
+  } finally {
+    lessonInFlight.delete(hash);
+  }
 }
 
 // ─── On-the-fly explanation ────────────────────────────────────────────────

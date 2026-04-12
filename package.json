@@ -11,7 +11,7 @@
   "dependencies": {
     "@react-navigation/native": "^7.1.33",
     "@supabase/supabase-js": "^2.99.2",
-    "expo": "~55.0.13",
+    "expo": "~55.0.14",
     "expo-apple-authentication": "~55.0.13",
     "expo-auth-session": "~55.0.13",
     "expo-av": "^16.0.8",
@@ -20,7 +20,7 @@
     "expo-haptics": "~55.0.14",
     "expo-linking": "~55.0.12",
     "expo-network": "~55.0.13",
-    "expo-router": "~55.0.11",
+    "expo-router": "~55.0.12",
     "expo-secure-store": "~55.0.13",
     "expo-speech": "~55.0.13",
     "expo-splash-screen": "~55.0.17",

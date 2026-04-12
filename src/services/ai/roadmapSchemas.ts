@@ -1,31 +1,62 @@
 import { z } from 'zod';
 
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item : String(item ?? '')))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n|]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+const LooseStringSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() : String(value ?? '').trim()),
+  z.string(),
+);
+
+const LooseStringArraySchema = z.preprocess(toStringArray, z.array(z.string()));
+
 const LessonPlanSchema = z.object({
-  title: z.string().min(2),
-  description: z.string().min(8),
-  topic: z.string().min(2),
-  lesson_kind: z.enum(['new_vocabulary', 'new_grammar', 'skill_practice', 'review']),
-  skill_type: z.enum(['vocabulary', 'grammar', 'mixed']),
-  focus_label: z.string().min(2),
-  objective: z.string().min(8),
-  grammar_focus: z.array(z.string().min(2)).min(1),
-  vocabulary_focus: z.array(z.string().min(2)).min(1),
+  title: LooseStringSchema.catch(''),
+  description: LooseStringSchema.catch(''),
+  topic: LooseStringSchema.catch(''),
+  lesson_kind: z.enum(['new_vocabulary', 'new_grammar', 'skill_practice', 'review']).catch('skill_practice'),
+  skill_type: z.enum(['vocabulary', 'grammar', 'mixed']).catch('mixed'),
+  focus_label: LooseStringSchema.catch(''),
+  objective: LooseStringSchema.catch(''),
+  grammar_focus: LooseStringArraySchema.catch([]),
+  vocabulary_focus: LooseStringArraySchema.catch([]),
 });
 
 const RoadmapUnitSchema = z.object({
-  title: z.string().min(2),
-  description: z.string().min(8),
-  theme: z.string().min(2),
-  grammar_focus: z.array(z.string().min(2)).min(1),
-  vocabulary_focus: z.array(z.string().min(2)).min(1),
-  can_do: z.array(z.string().min(6)).min(2),
-  lessons: z.array(LessonPlanSchema).length(4),
+  title: LooseStringSchema.catch(''),
+  description: LooseStringSchema.catch(''),
+  theme: LooseStringSchema.catch(''),
+  grammar_focus: LooseStringArraySchema.catch([]),
+  vocabulary_focus: LooseStringArraySchema.catch([]),
+  can_do: LooseStringArraySchema.catch([]),
+  lessons: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(LessonPlanSchema).max(4),
+  ).catch([]),
 });
 
 const RoadmapResponseSchema = z.object({
-  title: z.string().min(2),
-  summary: z.string().min(8),
-  units: z.array(RoadmapUnitSchema).length(10),
+  title: LooseStringSchema.catch(''),
+  summary: LooseStringSchema.catch(''),
+  units: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(RoadmapUnitSchema),
+  ).catch([]),
 });
 
 export type AIRoadmapResponse = z.infer<typeof RoadmapResponseSchema>;
@@ -46,5 +77,13 @@ export function parseRoadmapResponse(raw: string): AIRoadmapResponse {
     parsed = JSON.parse(objMatch[0]);
   }
 
-  return RoadmapResponseSchema.parse(parsed);
+  const result = RoadmapResponseSchema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `[${issue.path.join('.')}] ${issue.message}`)
+      .join(', ');
+    throw new Error(`Roadmap response could not be parsed: ${issues}`);
+  }
+
+  return result.data;
 }

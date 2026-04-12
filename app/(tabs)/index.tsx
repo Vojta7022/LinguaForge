@@ -363,6 +363,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user || !roadmap || !nextActiveLesson) return;
+    if (roadmapStatus === 'loading') return;
 
     const lessonLevel = nextActiveLesson.levelOverride ?? user.current_level;
     const prefetchKey = `${roadmap.id}:${nextActiveLesson.id}:${lessonLevel}`;
@@ -377,7 +378,7 @@ export default function HomeScreen() {
     ).catch((err) => {
       console.warn('[Lesson Prefetch] Failed:', (err as Error).message);
     });
-  }, [user, roadmap, nextActiveLesson]);
+  }, [user, roadmap, nextActiveLesson, roadmapStatus]);
 
   return (
     <ScrollView className="flex-1 bg-slate-50" showsVerticalScrollIndicator={false}>
