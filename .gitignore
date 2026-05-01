@@ -1,4 +1,10 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# Environment
+.env
+.env.*
+
+# Python
+**/__pycache__/
+.venv/
 
 # dependencies
 node_modules/
