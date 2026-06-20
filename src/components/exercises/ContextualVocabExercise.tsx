@@ -33,7 +33,7 @@ export default function ContextualVocabExercise({
         Read the context
       </Text>
       <View className="bg-amber-50 rounded-2xl border-2 border-amber-200 p-4 mb-4">
-        <Text className="text-slate-800 text-base leading-6 flex-row flex-wrap">
+        <Text className="text-slate-800 text-base leading-6">
           {passageParts.map((part, i) => (
             <Text key={i}>
               {part}
