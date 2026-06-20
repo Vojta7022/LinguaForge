@@ -13,7 +13,8 @@ export type LessonKind =
   | 'new_vocabulary'
   | 'new_grammar'
   | 'skill_practice'
-  | 'review';
+  | 'review'
+  | 'listening';
 
 export type LessonSkillType = 'vocabulary' | 'grammar' | 'mixed';
 

@@ -44,6 +44,7 @@ const LESSON_KIND_META: Record<LessonKind, { icon: string; focusLabel: string }>
   new_grammar: { icon: '📘', focusLabel: 'Grammar' },
   skill_practice: { icon: '🎯', focusLabel: 'Practice' },
   review: { icon: '🔁', focusLabel: 'Review' },
+  listening: { icon: '🎧', focusLabel: 'Listening' },
 };
 
 const UNIT_BY_TOPIC: Record<string, string> = {
@@ -180,6 +181,7 @@ function slugify(value: string): string {
 
 function lessonIcon(kind: LessonKind, topic: string): string {
   if (kind === 'review') return LESSON_KIND_META.review.icon;
+  if (kind === 'listening') return LESSON_KIND_META.listening.icon;
   if (kind === 'skill_practice') return LESSON_KIND_META.skill_practice.icon;
   if (kind === 'new_grammar') return LESSON_KIND_META.new_grammar.icon;
   return TOPIC_ICONS[topic] ?? LESSON_KIND_META.new_vocabulary.icon;
@@ -261,19 +263,19 @@ function buildFallbackUnit(
       canDo,
     },
     {
-      id: `${unitId}-practice`,
+      id: `${unitId}-listening`,
       unitId,
       unitTitle,
       unitIndex,
       lessonIndex: 2,
-      title: `${topic.split('&')[0].trim()} Practice`,
-      description: 'Mix the new words and grammar into fast, focused drills.',
-      icon: lessonIcon('skill_practice', topic),
-      topic: `${topic} practice`,
-      lessonKind: 'skill_practice',
-      skillType: 'mixed',
-      focusLabel: LESSON_KIND_META.skill_practice.focusLabel,
-      objective: `Use the new material from ${topic.toLowerCase()} without hints.`,
+      title: `${topic.split('&')[0].trim()} Listening`,
+      description: 'Listen and respond to natural speech about the unit topic.',
+      icon: lessonIcon('listening', topic),
+      topic: `${topic} listening`,
+      lessonKind: 'listening',
+      skillType: 'vocabulary',
+      focusLabel: LESSON_KIND_META.listening.focusLabel,
+      objective: `Understand spoken ${topic.toLowerCase()} language and answer comprehension questions.`,
       grammarFocus,
       vocabularyFocus,
       canDo,

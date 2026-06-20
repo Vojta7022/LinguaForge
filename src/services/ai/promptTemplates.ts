@@ -95,12 +95,12 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
     sequence: [
       'MULTIPLE_CHOICE',
       'WORD_MATCH',
-      'FILL_BLANK',
+      'IDIOM_MATCH',
       'WORD_BANK_TRANSLATE',
       'SENTENCE_REORDER',
       'MULTIPLE_CHOICE',
       'TRANSLATE',
-      'FILL_BLANK',
+      'CONTEXTUAL_VOCAB',
     ],
   },
   review: {
@@ -116,6 +116,18 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'TRANSLATE',
       'WORD_BANK_TRANSLATE',
     ],
+  },
+  listening: {
+    count: 6,
+    focus: 'vocabulary' as ExerciseFocus,
+    sequence: [
+      'LISTENING',
+      'MULTIPLE_CHOICE',
+      'LISTENING',
+      'FILL_BLANK',
+      'LISTENING',
+      'TRANSLATE',
+    ] as ExerciseType[],
   },
 };
 
