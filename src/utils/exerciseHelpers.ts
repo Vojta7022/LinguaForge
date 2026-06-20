@@ -187,7 +187,8 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
 
     case 'CLOZE': {
       const c = exercise.content as ClozeContent;
-      const map: Record<number, string> = JSON.parse(answer || '{}');
+      let map: Record<number, string> = {};
+      try { map = JSON.parse(answer || '{}') as Record<number, string>; } catch { /* malformed answer */ }
       const normalise = (s: string) => s.trim().toLowerCase();
       const allCorrect = c.blanks.every((b) => {
         const given = normalise(map[b.index] ?? '');

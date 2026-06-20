@@ -49,7 +49,6 @@ function blankLabelStyle(
   return correct ? 'text-green-700' : 'text-red-700';
 }
 
-/** Renders one blank chip inline. */
 function BlankChip({
   blank,
   map,
