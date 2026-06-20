@@ -327,7 +327,7 @@ export default function ExerciseShell({
               </Text>
             ) : null}
 
-            {/* Explain why button (FILL_BLANK / MULTIPLE_CHOICE, no distractor reason) */}
+            {/* Explain why button (FILL_BLANK / MULTIPLE_CHOICE / ERROR_CORRECTION) */}
             {!isCorrect && !feedback.distractorReason && !explainText &&
               (exercise.type === 'FILL_BLANK' || exercise.type === 'MULTIPLE_CHOICE' || exercise.type === 'ERROR_CORRECTION') ? (
               <Pressable
