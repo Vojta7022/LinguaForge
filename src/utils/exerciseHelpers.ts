@@ -1,5 +1,6 @@
 import type {
   Exercise,
+  ErrorCorrectionContent,
   FillBlankContent,
   MultipleChoiceContent,
   SentenceReorderContent,
@@ -154,6 +155,18 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
         correctAnswerDisplay: tr.reference_translation,
         explanation: tr.context_note ?? '',
         altAnswers: alts.length > 0 ? alts : undefined,
+      };
+    }
+
+    case 'ERROR_CORRECTION': {
+      const ec = c as ErrorCorrectionContent;
+      const normalised = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+      const isCorrect = normalised(answer) === normalised(ec.correct_sentence);
+      return {
+        isCorrect,
+        isClose: false,
+        correctAnswerDisplay: ec.correct_sentence,
+        explanation: ec.error_explanation,
       };
     }
 
