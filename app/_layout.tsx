@@ -85,6 +85,10 @@ export default function RootLayout() {
         name="lesson-complete/[id]"
         options={{ presentation: 'fullScreenModal', animation: 'fade' }}
       />
+      <Stack.Screen
+        name="srs-review"
+        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', headerShown: false }}
+      />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
