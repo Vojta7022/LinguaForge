@@ -107,14 +107,14 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
     count: 8,
     focus: 'mixed',
     sequence: [
-      'WORD_MATCH',
       'MULTIPLE_CHOICE',
+      'ERROR_CORRECTION',
       'FILL_BLANK',
-      'WORD_BANK_TRANSLATE',
+      'CLOZE',
       'SENTENCE_REORDER',
       'MULTIPLE_CHOICE',
+      'ERROR_CORRECTION',
       'TRANSLATE',
-      'WORD_BANK_TRANSLATE',
     ],
   },
   listening: {
