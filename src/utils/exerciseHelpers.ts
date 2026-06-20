@@ -1,6 +1,7 @@
 import type {
   Exercise,
   ClozeContent,
+  ContextualVocabContent,
   ErrorCorrectionContent,
   FillBlankContent,
   MultipleChoiceContent,
@@ -219,6 +220,18 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
 
     case 'IDIOM_MATCH':
       return { isCorrect: true, isClose: false, correctAnswerDisplay: '', explanation: '' };
+
+    case 'CONTEXTUAL_VOCAB': {
+      const cv = exercise.content as ContextualVocabContent;
+      const correctOption = cv.options[cv.correct_index];
+      const isCorrect = answer === correctOption;
+      return {
+        isCorrect,
+        isClose: false,
+        correctAnswerDisplay: correctOption,
+        explanation: '',
+      };
+    }
 
     case 'WORD_MATCH':
       return { isCorrect: true, correctAnswerDisplay: '', explanation: '', isClose: false };
