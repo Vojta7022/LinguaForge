@@ -216,6 +216,9 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
       };
     }
 
+    case 'IDIOM_MATCH':
+      return { isCorrect: true, isClose: false, correctAnswerDisplay: '', explanation: '' };
+
     case 'WORD_MATCH':
       return { isCorrect: true, correctAnswerDisplay: '', explanation: '', isClose: false };
 
