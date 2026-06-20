@@ -4,6 +4,7 @@ import type {
   ContextualVocabContent,
   ErrorCorrectionContent,
   FillBlankContent,
+  ListeningContent,
   MultipleChoiceContent,
   SentenceReorderContent,
   TranslateContent,
@@ -235,6 +236,18 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
 
     case 'WORD_MATCH':
       return { isCorrect: true, correctAnswerDisplay: '', explanation: '', isClose: false };
+
+    case 'LISTENING': {
+      const lc = exercise.content as ListeningContent;
+      const correctOption = lc.options[lc.correct_index];
+      const isCorrect = answer === correctOption;
+      return {
+        isCorrect,
+        isClose: false,
+        correctAnswerDisplay: correctOption,
+        explanation: '',
+      };
+    }
 
     default:
       return {
