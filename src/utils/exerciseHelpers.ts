@@ -238,7 +238,7 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
       return { isCorrect: true, correctAnswerDisplay: '', explanation: '', isClose: false };
 
     case 'LISTENING': {
-      const lc = exercise.content as ListeningContent;
+      const lc = exercise.content;
       const correctOption = lc.options[lc.correct_index];
       const isCorrect = answer === correctOption;
       return {

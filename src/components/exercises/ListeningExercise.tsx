@@ -35,11 +35,15 @@ export default function ListeningExercise({
 
   useEffect(() => {
     if (autoPlay !== false) {
-      speakText();
+      setIsSpeaking(true);
+      Speech.speak(content.tts_text, {
+        language: content.tts_locale,
+        onDone: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+      });
     }
-    return () => {
-      Speech.stop();
-    };
+    return () => { Speech.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleStop() {
