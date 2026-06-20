@@ -31,6 +31,14 @@ interface SyncQueueRow {
   synced_at: string | null;
 }
 
+function str(val: unknown): string | null {
+  return typeof val === 'string' ? val : null;
+}
+
+function num(val: unknown): number | null {
+  return typeof val === 'number' ? val : null;
+}
+
 /** Minimal shape of the remote users row we care about for conflict resolution. */
 interface RemoteUserRow {
   id: string;
@@ -173,14 +181,14 @@ export async function pullFromSupabase(userId: string): Promise<void> {
           updated_at      = ?
         WHERE id = ?`,
         [
-          remoteUser['display_name'] as string ?? null,
-          remoteUser['native_language'] as string ?? null,
-          remoteUser['target_language'] as string ?? null,
-          remoteUser['current_level'] as string ?? null,
+          str(remoteUser['display_name']),
+          str(remoteUser['native_language']),
+          str(remoteUser['target_language']),
+          str(remoteUser['current_level']),
           typeof remoteUser.xp === 'number' ? remoteUser.xp : 0,
           typeof remoteUser.streak_count === 'number' ? remoteUser.streak_count : 0,
-          remoteUser['streak_last_date'] as string ?? null,
-          remoteUser['daily_goal'] as number ?? null,
+          str(remoteUser['streak_last_date']),
+          num(remoteUser['daily_goal']),
           remoteUser.updated_at,
           userId,
         ],
@@ -205,13 +213,13 @@ export async function pullFromSupabase(userId: string): Promise<void> {
         (id, user_id, exercise_id, is_correct, answer_given, time_spent_ms, attempted_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        row['id'] as string,
-        row['user_id'] as string ?? userId,
-        row['exercise_id'] as string ?? null,
+        str(row['id']),
+        str(row['user_id']) ?? userId,
+        str(row['exercise_id']),
         row['is_correct'] ? 1 : 0,
-        row['answer_given'] as string ?? null,
-        row['time_spent_ms'] as number ?? null,
-        row['attempted_at'] as string ?? null,
+        str(row['answer_given']),
+        num(row['time_spent_ms']),
+        str(row['attempted_at']),
       ],
     );
   }

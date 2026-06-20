@@ -1,7 +1,7 @@
 import '../global.css';
 
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { getDB } from '@/services/database/db';
 import { useAuthStore } from '@/stores/authStore';
@@ -63,12 +63,14 @@ export default function RootLayout() {
   }, [appReady, isInitialized, session, isGuest, isOnboarded, segments[0]]);
 
   // Step 4: Trigger sync on network reconnect (30s debounce to let connection stabilise)
+  // Only fires on false→true transition; skips cold-start where prev is null
   // Only syncs for authenticated users — guests have no Supabase account
+  const wasOnlineRef = useRef<boolean | null>(null);
   useEffect(() => {
-    if (!isOnline || !userId || isGuest) return;
-    const timer = setTimeout(() => {
-      triggerSync(userId);
-    }, 30_000);
+    const prev = wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+    if (!isOnline || !userId || isGuest || prev !== false) return;
+    const timer = setTimeout(() => { triggerSync(userId); }, 30_000);
     return () => clearTimeout(timer);
   }, [isOnline, userId, isGuest, triggerSync]);
 
