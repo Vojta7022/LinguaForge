@@ -1,29 +1,22 @@
 import { View, Text, ScrollView, Pressable } from 'react-native';
-import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useMemo, useState, useCallback } from 'react';
 import { useUserStore } from '@/stores/userStore';
 import { useLessonStore } from '@/stores/lessonStore';
 import { LESSONS, buildFallbackRoadmap } from '@/utils/lessonData';
+import { getAccuracyByLesson } from '@/repositories/progressRepository';
 
 const EMPTY_LESSONS: ReturnType<typeof buildFallbackRoadmap>['lessons'] = [];
 
-// Accuracy for a topic derived from in-memory progress (best-effort)
-function useMockAccuracy(index: number): number {
-  // Rotate mock values so not every bar looks the same
-  const mocks = [0, 0.82, 0, 0.64, 0, 0.91];
-  return mocks[index % mocks.length];
-}
-
 function GrammarRow({
   lesson,
-  index,
+  accuracy,
   onPress,
 }: {
   lesson: (typeof LESSONS)[number];
-  index: number;
+  accuracy: number;
   onPress: () => void;
 }) {
-  const accuracy = useMockAccuracy(index);
   const hasPracticed = accuracy > 0;
 
   return (
@@ -39,10 +32,10 @@ function GrammarRow({
             <View className="flex-1 bg-slate-100 rounded-full h-1.5">
               <View
                 className="bg-primary-500 h-1.5 rounded-full"
-                style={{ width: `${Math.round(accuracy * 100)}%` }}
+                style={{ width: `${accuracy}%` }}
               />
             </View>
-            <Text className="text-xs text-slate-400">{Math.round(accuracy * 100)}%</Text>
+            <Text className="text-xs text-slate-400">{accuracy}%</Text>
           </View>
         ) : (
           <Text className="text-xs text-slate-400 mt-0.5">Not practiced yet</Text>
@@ -63,6 +56,22 @@ export default function PracticeScreen() {
   [user]);
   const availableLessons = roadmapLessons.length > 0 ? roadmapLessons : fallbackLessons;
   const grammarLessons = availableLessons.filter((lesson) => lesson.lessonKind !== 'review').slice(0, 8);
+
+  const [accuracyByLesson, setAccuracyByLesson] = useState<Record<string, number>>({});
+  const userId = user?.id;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      getAccuracyByLesson(userId)
+        .then(setAccuracyByLesson)
+        .catch(() => {});
+    }, [userId]),
+  );
+
+  const weakLessons = grammarLessons
+    .filter((l) => (accuracyByLesson[l.id] ?? 0) > 0 && (accuracyByLesson[l.id] ?? 0) < 60)
+    .slice(0, 3);
 
   // Pick a "weak" topic — for now, just rotate through lessons
   const quickTopic = availableLessons[Math.floor(Date.now() / 86_400_000) % availableLessons.length];
@@ -103,17 +112,33 @@ export default function PracticeScreen() {
           </View>
         </Pressable>
 
+        {/* Needs Work */}
+        {weakLessons.length > 0 && (
+          <View className="bg-red-50 rounded-2xl p-5 border border-red-100">
+            <Text className="text-red-700 font-bold text-base mb-1">Needs Work</Text>
+            <Text className="text-red-400 text-xs mb-3">Below 60% accuracy — extra practice recommended</Text>
+            {weakLessons.map((lesson) => (
+              <GrammarRow
+                key={lesson.id}
+                lesson={lesson}
+                accuracy={accuracyByLesson[lesson.id] ?? 0}
+                onPress={() => router.push(`/lesson/${lesson.id}`)}
+              />
+            ))}
+          </View>
+        )}
+
         {/* Grammar Focus */}
         <View className="bg-white rounded-2xl p-5 border border-slate-100">
           <Text className="text-slate-800 font-bold text-base mb-1">Grammar Focus</Text>
           <Text className="text-slate-400 text-xs mb-3">
             Tap a topic to generate targeted exercises
           </Text>
-          {grammarLessons.map((lesson, index) => (
+          {grammarLessons.map((lesson) => (
             <GrammarRow
               key={lesson.id}
               lesson={lesson}
-              index={index}
+              accuracy={accuracyByLesson[lesson.id] ?? 0}
               onPress={() => router.push(`/lesson/${lesson.id}`)}
             />
           ))}

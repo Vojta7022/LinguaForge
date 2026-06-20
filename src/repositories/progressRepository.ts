@@ -87,6 +87,29 @@ export async function getWeeklyActivity(userId: string): Promise<DayActivity[]> 
   return days.map((date) => ({ date, count: rowMap.get(date) ?? 0 }));
 }
 
+/**
+ * Returns accuracy (0–100) per lesson for the given user.
+ * Only lessons with at least 1 attempt are included.
+ */
+export async function getAccuracyByLesson(userId: string): Promise<Record<string, number>> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<{ lesson_id: string; total: number; correct: number }>(
+    `SELECT e.lesson_id, COUNT(*) as total, SUM(p.is_correct) as correct
+     FROM user_progress p
+     JOIN exercises e ON e.id = p.exercise_id
+     WHERE p.user_id = ? AND e.lesson_id IS NOT NULL
+     GROUP BY e.lesson_id`,
+    [userId],
+  );
+  const result: Record<string, number> = {};
+  for (const row of rows ?? []) {
+    result[row.lesson_id] = row.total > 0
+      ? Math.round((row.correct / row.total) * 100)
+      : 0;
+  }
+  return result;
+}
+
 export interface TotalStats {
   completed: number;   // total exercise attempts
   correct: number;     // total correct attempts
