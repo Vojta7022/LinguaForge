@@ -89,14 +89,8 @@ export async function flushSyncQueue(): Promise<SyncResult> {
         if (remote) {
           const mergedPayload = {
             ...payload,
-            xp: Math.max(
-              typeof payload['xp'] === 'number' ? payload['xp'] : 0,
-              remote.xp,
-            ),
-            streak_count: Math.max(
-              typeof payload['streak_count'] === 'number' ? payload['streak_count'] : 0,
-              remote.streak_count,
-            ),
+            xp: Math.max(num(payload['xp']) ?? 0, remote.xp),
+            streak_count: Math.max(num(payload['streak_count']) ?? 0, remote.streak_count),
           };
           const { error } = await supabase
             .from('users')
@@ -113,11 +107,8 @@ export async function flushSyncQueue(): Promise<SyncResult> {
         // Never overwrite historical records; ignore conflicts by id
         const { error } = await supabase
           .from('user_progress')
-          .insert([payload]);
-        // Duplicate key errors (23505) are silently ignored per spec
-        if (error && !error.message.includes('duplicate key') && error.code !== '23505') {
-          throw new Error(error.message);
-        }
+          .upsert([payload], { onConflict: 'id', ignoreDuplicates: true });
+        if (error) throw new Error(error.message);
       } else {
         // Generic upsert for all other tables
         const { error } = await supabase

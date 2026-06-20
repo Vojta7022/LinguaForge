@@ -1,6 +1,7 @@
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { colors } from '@/theme/colors';
 import { useSRSStore } from '@/stores/srsStore';
 import { useUserStore } from '@/stores/userStore';
 import { getExercisesByIds } from '@/repositories/exerciseRepository';
@@ -38,7 +39,7 @@ export default function SRSReviewScreen() {
         const map = new Map(exercises.map((e) => [e.id, e]));
         setExerciseMap(map);
       })
-      .catch(() => setExerciseMap(new Map()))
+      .catch(() => router.back())
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -49,11 +50,10 @@ export default function SRSReviewScreen() {
     const quality = inferQuality(isCorrect, timeMs);
     void recordReview(card.id, quality);
 
-    const updatedResults: SessionResults = {
-      correct: sessionResults.correct + (isCorrect ? 1 : 0),
-      total: sessionResults.total + 1,
-    };
-    setSessionResults(updatedResults);
+    setSessionResults((prev) => ({
+      correct: prev.correct + (isCorrect ? 1 : 0),
+      total: prev.total + 1,
+    }));
 
     const nextIndex = currentIndex + 1;
     if (nextIndex < cards.length) {
@@ -90,7 +90,7 @@ export default function SRSReviewScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#0D9488" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
       </View>
     );
   }
@@ -127,7 +127,7 @@ export default function SRSReviewScreen() {
     // Card exists but exercise was not found in DB — skip it
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#0D9488" />
+        <ActivityIndicator size="large" color={colors.primary[600]} />
       </View>
     );
   }
