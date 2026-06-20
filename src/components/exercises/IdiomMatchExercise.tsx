@@ -56,10 +56,8 @@ export default function IdiomMatchExercise({ content, onComplete }: Props) {
       setSelectedIdiomIndex(null);
 
       if (nextIdioms.size === content.idioms.length) {
-        setTimeout(() => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          onComplete();
-        }, 300);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onComplete();
       }
     } else {
       // Wrong pair — flash red for 600ms then reset
@@ -100,7 +98,7 @@ export default function IdiomMatchExercise({ content, onComplete }: Props) {
                 disabled={isMatched}
                 className={`rounded-2xl px-3 py-3.5 border-2 items-center justify-center
                   ${isMatched
-                    ? 'bg-green-50 border-green-300 opacity-50'
+                    ? 'bg-green-100 border-green-300 opacity-50'
                     : isFlashing
                     ? 'bg-red-50 border-red-400'
                     : isSelected
@@ -138,7 +136,7 @@ export default function IdiomMatchExercise({ content, onComplete }: Props) {
                 disabled={isMatched}
                 className={`rounded-2xl px-3 py-3.5 border-2 items-center justify-center
                   ${isMatched
-                    ? 'bg-green-50 border-green-300 opacity-50'
+                    ? 'bg-green-100 border-green-300 opacity-50'
                     : isFlashing
                     ? 'bg-red-50 border-red-400'
                     : 'bg-white border-slate-200 active:border-slate-400'
@@ -161,11 +159,6 @@ export default function IdiomMatchExercise({ content, onComplete }: Props) {
         </View>
       </View>
 
-      {matchedCount === total ? (
-        <View className="mt-6 bg-green-50 rounded-2xl p-4 border border-green-200 items-center">
-          <Text className="text-green-700 font-bold text-base">All matched!</Text>
-        </View>
-      ) : null}
     </View>
   );
 }

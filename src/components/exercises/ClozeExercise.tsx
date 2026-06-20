@@ -99,11 +99,10 @@ export default function ClozeExercise({
     firstEmpty?.index ?? content.blanks[0]?.index ?? 0
   );
 
-  // Deduplicated word bank minus words already placed
-  const placedWords = new Set(Object.values(map));
   const availableWords = useMemo(() => {
+    const placed = new Set(Object.values(parseMap(selectedAnswer)));
     const allWords = content.blanks.flatMap((b) => b.word_bank);
-    return [...new Set(allWords)].filter((w) => !placedWords.has(w));
+    return [...new Set(allWords)].filter((w) => !placed.has(w));
   }, [content.blanks, selectedAnswer]);
 
   // Split passage on ___ — yields N+1 segments for N blanks
