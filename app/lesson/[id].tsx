@@ -10,6 +10,8 @@ import { useGamificationStore } from '@/stores/gamificationStore';
 import { useUserStore } from '@/stores/userStore';
 import { generateLessonExercises } from '@/services/ai/exerciseGenerator';
 import { buildFallbackRoadmap, getLessonById } from '@/utils/lessonData';
+import { upsertSRSCard, getSRSCard, updateSRSCard } from '@/repositories/srsRepository';
+import { calculateNextReview, inferQuality } from '@/services/srs/spacedRepetition';
 
 const EMPTY_LESSONS: ReturnType<typeof buildFallbackRoadmap>['lessons'] = [];
 
@@ -114,6 +116,25 @@ export default function LessonScreen() {
       consecutiveCorrectRef.current += 1;
     } else {
       consecutiveCorrectRef.current = 0;
+    }
+
+    // SRS: schedule incorrect answers for review; advance correct answers already in SRS
+    if (!isCorrect) {
+      upsertSRSCard(user.id, exercise.id).catch((err) =>
+        console.warn('[SRS] upsertSRSCard failed:', err),
+      );
+    } else if (exercise.times_correct > 0) {
+      getSRSCard(user.id, exercise.id).then((card) => {
+        if (!card) return;
+        const quality = inferQuality(true, timeMs);
+        const result = calculateNextReview(card, quality);
+        return updateSRSCard(card.id, {
+          next_review_date: result.next_review_date,
+          interval_days: result.next_interval_days,
+          ease_factor: result.next_ease_factor,
+          repetitions: result.next_repetitions,
+        });
+      }).catch((err) => console.warn('[SRS] updateSRSCard failed:', err));
     }
 
     if (currentIndex >= queue.length - 1) {
