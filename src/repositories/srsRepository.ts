@@ -4,12 +4,14 @@ import type { SpacedRepetitionCard } from '@/types/srs';
 export async function getDueCards(userId: string): Promise<SpacedRepetitionCard[]> {
   const db = await getDB();
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return db.getAllAsync<SpacedRepetitionCard>(
+  const rows = await db.getAllAsync<SpacedRepetitionCard>(
     `SELECT * FROM spaced_repetition
      WHERE user_id = ? AND next_review_date <= ?
-     ORDER BY next_review_date ASC`,
+     ORDER BY next_review_date ASC
+     LIMIT 20`,
     [userId, today],
   );
+  return rows ?? [];
 }
 
 export async function upsertCard(card: SpacedRepetitionCard): Promise<void> {

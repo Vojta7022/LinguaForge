@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { SpacedRepetitionCard, SM2Quality } from '@/types/srs';
+import { getDueCards, updateSRSCard } from '@/repositories/srsRepository';
+import { calculateNextReview } from '@/services/srs/spacedRepetition';
 
 interface SRSState {
   dueCards: SpacedRepetitionCard[];
@@ -15,22 +17,26 @@ export const useSRSStore = create<SRSState>((set, get) => ({
   dueCount: 0,
   isLoading: false,
 
-  loadDueCards: async (_userId) => {
-    // TODO: query SQLite spaced_repetition table for next_review_date <= today (Phase 2)
+  loadDueCards: async (userId) => {
     set({ isLoading: true });
     try {
-      // const cards = await srsRepository.getDueCards(userId);
-      // set({ dueCards: cards, dueCount: cards.length });
+      const cards = await getDueCards(userId);
+      set({ dueCards: cards, dueCount: cards.length });
     } finally {
       set({ isLoading: false });
     }
   },
 
   recordReview: async (cardId, quality) => {
-    // TODO: apply SM-2 and update SQLite (Phase 2)
-    // const card = get().dueCards.find(c => c.id === cardId);
-    // const result = sm2Algorithm(card, quality);
-    // await srsRepository.update(cardId, result);
+    const card = get().dueCards.find((c) => c.id === cardId);
+    if (!card) return;
+    const result = calculateNextReview(card, quality);
+    await updateSRSCard(cardId, {
+      next_review_date: result.next_review_date,
+      interval_days: result.next_interval_days,
+      ease_factor: result.next_ease_factor,
+      repetitions: result.next_repetitions,
+    });
     set((state) => ({
       dueCards: state.dueCards.filter((c) => c.id !== cardId),
       dueCount: Math.max(0, state.dueCount - 1),

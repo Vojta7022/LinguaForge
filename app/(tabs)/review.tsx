@@ -1,7 +1,9 @@
 import { View, Text, ScrollView } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useSRSStore } from '@/stores/srsStore';
 import { useProgressStore } from '@/stores/progressStore';
+import { useUserStore } from '@/stores/userStore';
 import { getExercisesByIds } from '@/repositories/exerciseRepository';
 import type { Exercise, ExerciseContent } from '@/types/exercise';
 
@@ -63,8 +65,16 @@ function ExerciseTypeTag({ type }: { type: string }) {
 
 export default function ReviewScreen() {
   const dueCount = useSRSStore((s) => s.dueCount);
+  const loadDueCards = useSRSStore((s) => s.loadDueCards);
+  const userId = useUserStore((s) => s.user?.id);
   const recentProgress = useProgressStore((s) => s.recentProgress);
   const [wrongItems, setWrongItems] = useState<WrongItem[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) loadDueCards(userId);
+    }, [userId, loadDueCards]),
+  );
 
   useEffect(() => {
     const wrongProgress = recentProgress.filter((p) => !p.is_correct).slice(0, 10);
