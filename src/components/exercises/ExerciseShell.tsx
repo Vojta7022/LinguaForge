@@ -15,6 +15,11 @@ import SentenceReorderExercise from './SentenceReorderExercise';
 import TranslateExercise from './TranslateExercise';
 import WordMatchExercise from './WordMatchExercise';
 import WordBankTranslateExercise from './WordBankTranslateExercise';
+import ErrorCorrectionExercise from './ErrorCorrectionExercise';
+import ClozeExercise from './ClozeExercise';
+import IdiomMatchExercise from './IdiomMatchExercise';
+import ContextualVocabExercise from './ContextualVocabExercise';
+import ListeningExercise from './ListeningExercise';
 
 import type {
   Exercise,
@@ -25,6 +30,11 @@ import type {
   TranslateContent,
   WordMatchContent,
   WordBankTranslateContent,
+  ErrorCorrectionContent,
+  ClozeContent,
+  IdiomMatchContent,
+  ContextualVocabContent,
+  ListeningContent,
 } from '@/types/exercise';
 import type { SupportedLanguage } from '@/types/user';
 import { getFeedback } from '@/utils/exerciseHelpers';
@@ -81,8 +91,8 @@ export default function ExerciseShell({
     transform: [{ translateY: bannerY.value }],
   }));
 
-  // WORD_MATCH is self-completing — no Check button, no feedback banner
-  const isSelfComplete = exercise.type === 'WORD_MATCH';
+  // WORD_MATCH and IDIOM_MATCH are self-completing — no Check button, no feedback banner
+  const isSelfComplete = exercise.type === 'WORD_MATCH' || exercise.type === 'IDIOM_MATCH';
 
   function handleCheck() {
     if (!selectedAnswer) return;
@@ -215,10 +225,47 @@ export default function ExerciseShell({
               isChecked={isChecked}
             />
           )}
-          {!['FILL_BLANK', 'MULTIPLE_CHOICE', 'TRANSLATE', 'WORD_MATCH', 'WORD_BANK_TRANSLATE', 'SENTENCE_REORDER'].includes(exercise.type) && (
-            <View className="flex-1 items-center justify-center py-12">
-              <Text className="text-slate-400">Exercise type {exercise.type} coming soon</Text>
-            </View>
+          {exercise.type === 'ERROR_CORRECTION' && (
+            <ErrorCorrectionExercise
+              content={exercise.content as ErrorCorrectionContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
+              isCorrect={isCorrect}
+            />
+          )}
+          {exercise.type === 'CLOZE' && (
+            <ClozeExercise
+              content={exercise.content as ClozeContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
+              isCorrect={isCorrect}
+            />
+          )}
+          {exercise.type === 'IDIOM_MATCH' && (
+            <IdiomMatchExercise
+              content={exercise.content as IdiomMatchContent}
+              onComplete={handleAutoComplete}
+            />
+          )}
+          {exercise.type === 'CONTEXTUAL_VOCAB' && (
+            <ContextualVocabExercise
+              content={exercise.content as ContextualVocabContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
+              isCorrect={isCorrect}
+            />
+          )}
+          {exercise.type === 'LISTENING' && (
+            <ListeningExercise
+              content={exercise.content as ListeningContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
+              isCorrect={isCorrect}
+            />
           )}
         </View>
       </ScrollView>
@@ -282,7 +329,7 @@ export default function ExerciseShell({
 
             {/* Explain why button (FILL_BLANK / MULTIPLE_CHOICE, no distractor reason) */}
             {!isCorrect && !feedback.distractorReason && !explainText &&
-              (exercise.type === 'FILL_BLANK' || exercise.type === 'MULTIPLE_CHOICE') ? (
+              (exercise.type === 'FILL_BLANK' || exercise.type === 'MULTIPLE_CHOICE' || exercise.type === 'ERROR_CORRECTION') ? (
               <Pressable
                 onPress={handleExplain}
                 disabled={isExplaining}

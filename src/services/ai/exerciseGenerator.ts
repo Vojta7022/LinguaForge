@@ -506,6 +506,11 @@ export async function generateExplanation(
       `Question: "${c.question as string}"\n` +
       `Correct answer: "${options[correctIdx]}"\n` +
       `Student's wrong answer: "${wrongAnswer}"`;
+  } else if (exercise.type === 'ERROR_CORRECTION') {
+    context =
+      `Incorrect sentence: "${c.incorrect_sentence as string}"\n` +
+      `Correct sentence: "${c.correct_sentence as string}"\n` +
+      `Student's attempt: "${wrongAnswer}"`;
   } else {
     return '';
   }
