@@ -6,6 +6,7 @@ import { useUserStore } from '@/stores/userStore';
 import { useGamificationStore } from '@/stores/gamificationStore';
 import { useLessonStore } from '@/stores/lessonStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useSyncStore } from '@/stores/syncStore';
 import { xpToLevel } from '@/utils/xpCalculator';
 import { LANGUAGE_FLAGS, LANGUAGE_NAMES, CEFR_DESCRIPTORS } from '@/types/user';
 import type { CEFRLevel } from '@/types/user';
@@ -90,6 +91,8 @@ export default function ProfileScreen() {
   const { streak } = useGamificationStore();
   const completedLessonIds = useLessonStore((s) => s.completedLessonIds);
   const { settings, updateSetting } = useSettingsStore();
+  const syncError = useSyncStore((s) => s.syncError);
+  const syncStatus = useSyncStore((s) => s.syncStatus);
 
   const [typeAccuracy, setTypeAccuracy] = useState<TypeAccuracy[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
@@ -153,6 +156,13 @@ export default function ProfileScreen() {
             >
               <Text className="text-white font-bold text-xs">Sign up</Text>
             </Pressable>
+          </View>
+        ) : null}
+
+        {/* Sync error banner */}
+        {syncStatus === 'error' && syncError ? (
+          <View className="bg-red-50 border border-red-200 rounded-2xl p-3 flex-row items-center gap-2">
+            <Text className="text-red-600 text-xs flex-1">Sync error: {syncError}</Text>
           </View>
         ) : null}
 

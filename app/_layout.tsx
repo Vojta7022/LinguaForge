@@ -6,6 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { getDB } from '@/services/database/db';
 import { useAuthStore } from '@/stores/authStore';
 import { useUserStore } from '@/stores/userStore';
+import { useSyncStore } from '@/stores/syncStore';
+import { useNetwork } from '@/hooks/useNetwork';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -18,6 +20,8 @@ export default function RootLayout() {
 
   const { session, isGuest, guestId, isOnboarded, isInitialized, initialize } = useAuthStore();
   const { loadFromDB } = useUserStore();
+  const triggerSync = useSyncStore((s) => s.triggerSync);
+  const { isOnline } = useNetwork();
 
   // Step 1: Bootstrap — open SQLite (runs migrations) then restore auth/guest session
   useEffect(() => {
@@ -57,6 +61,16 @@ export default function RootLayout() {
       if (inAuth || inOnboarding) router.replace('/(tabs)');
     }
   }, [appReady, isInitialized, session, isGuest, isOnboarded, segments[0]]);
+
+  // Step 4: Trigger sync on network reconnect (30s debounce to let connection stabilise)
+  // Only syncs for authenticated users — guests have no Supabase account
+  useEffect(() => {
+    if (!isOnline || !userId || isGuest) return;
+    const timer = setTimeout(() => {
+      triggerSync(userId);
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [isOnline, userId, isGuest, triggerSync]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
