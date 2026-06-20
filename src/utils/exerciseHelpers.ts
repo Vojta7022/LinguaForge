@@ -1,5 +1,6 @@
 import type {
   Exercise,
+  ClozeContent,
   ErrorCorrectionContent,
   FillBlankContent,
   MultipleChoiceContent,
@@ -181,6 +182,23 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
         correctAnswerDisplay: sr.correct_sentence,
         explanation: sr.grammar_note ?? '',
         isClose: false,
+      };
+    }
+
+    case 'CLOZE': {
+      const c = exercise.content as ClozeContent;
+      const map: Record<number, string> = JSON.parse(answer || '{}');
+      const normalise = (s: string) => s.trim().toLowerCase();
+      const allCorrect = c.blanks.every((b) => {
+        const given = normalise(map[b.index] ?? '');
+        return b.acceptable_answers.map(normalise).includes(given);
+      });
+      const correctDisplay = c.blanks.map((b) => b.correct_answer).join(' / ');
+      return {
+        isCorrect: allCorrect,
+        isClose: false,
+        correctAnswerDisplay: allCorrect ? '' : correctDisplay,
+        explanation: '',
       };
     }
 
