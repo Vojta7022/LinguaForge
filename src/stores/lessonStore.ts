@@ -12,6 +12,7 @@ interface LessonState {
   lessonAccuracy: Record<string, number>;
 
   setCourseRoadmap: (roadmap: CourseRoadmap) => void;
+  clearCourseRoadmap: () => void;
   setRoadmapStatus: (status: LessonState['roadmapStatus']) => void;
   setRoadmapError: (error: string | null) => void;
   startSession: (lessonId: string, userId: string) => void;
@@ -37,6 +38,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       roadmapStatus: 'ready',
       roadmapError: null,
     }),
+
+  clearCourseRoadmap: () =>
+    set({ courseRoadmap: null, roadmapStatus: 'idle', roadmapError: null }),
 
   setRoadmapStatus: (roadmapStatus) => set({ roadmapStatus }),
 

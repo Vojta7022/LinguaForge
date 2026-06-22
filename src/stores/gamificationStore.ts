@@ -50,6 +50,9 @@ interface GamificationState {
   /** Award the flat +25 XP daily goal bonus and clear the notification flag. */
   awardDailyGoalBonus: (level: CEFRLevel) => number;
 
+  /** Update goal_xp in dailyGoal without resetting earned_xp. */
+  reinitDailyGoal: (newGoal: number) => void;
+
   clearMilestone: () => void;
   clearDailyGoalNotification: () => void;
 }
@@ -196,6 +199,13 @@ export const useGamificationStore = create<GamificationState>((set, get) => ({
 
     return updatedUser;
   },
+
+  // ─── Daily goal reinit ────────────────────────────────────────────────────
+
+  reinitDailyGoal: (newGoal) =>
+    set((s) => ({
+      dailyGoal: { ...s.dailyGoal, goal_xp: newGoal },
+    })),
 
   // ─── Notification clearing ─────────────────────────────────────────────
 

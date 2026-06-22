@@ -49,3 +49,11 @@ export async function updateXP(id: string, xp: number): Promise<void> {
     [xp, new Date().toISOString(), id],
   );
 }
+
+export async function updateDailyGoal(userId: string, goal: number): Promise<void> {
+  const db = await getDB();
+  await db.runAsync(
+    'UPDATE users SET daily_goal = ?, updated_at = ? WHERE id = ?',
+    [goal, new Date().toISOString(), userId],
+  );
+}

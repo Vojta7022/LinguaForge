@@ -7,6 +7,7 @@ import { useGamificationStore } from '@/stores/gamificationStore';
 import { useLessonStore } from '@/stores/lessonStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useSyncStore } from '@/stores/syncStore';
+import { updateDailyGoal } from '@/repositories/userRepository';
 import { xpToLevel } from '@/utils/xpCalculator';
 import { LANGUAGE_FLAGS, LANGUAGE_NAMES, CEFR_DESCRIPTORS } from '@/types/user';
 import type { CEFRLevel } from '@/types/user';
@@ -83,17 +84,148 @@ function WeeklyChart({ data }: { data: DayActivity[] }) {
   );
 }
 
+// ─── Stats grid sub-component ────────────────────────────────────────────
+
+function StatsGrid({
+  xp,
+  streakCount,
+  longestStreak,
+  lessonsCount,
+  overallAccuracyPct,
+  uniqueTopics,
+  totalCompleted,
+  numericLevel,
+  levelProgress,
+}: {
+  xp: number;
+  streakCount: number;
+  longestStreak: number;
+  lessonsCount: number;
+  overallAccuracyPct: number;
+  uniqueTopics: number;
+  totalCompleted: number;
+  numericLevel: number;
+  levelProgress: number;
+}) {
+  return (
+    <View className="bg-white rounded-2xl p-5 border border-slate-100">
+      <Text className="text-slate-800 font-bold text-base mb-4">Stats</Text>
+      <View className="flex-row flex-wrap gap-3">
+        <StatCard emoji="⭐" value={xp.toLocaleString()} label="Total XP" />
+        <StatCard emoji="🔥" value={`${streakCount}`} label="Current streak" />
+        <StatCard emoji="🏅" value={`${longestStreak}`} label="Best streak" />
+        <StatCard emoji="📚" value={`${lessonsCount}`} label="Lessons done" />
+        <StatCard emoji="✅" value={totalCompleted > 0 ? `${overallAccuracyPct}%` : '—'} label="Accuracy" />
+        <StatCard emoji="💡" value={uniqueTopics > 0 ? `${uniqueTopics}` : '—'} label="Topics learned" />
+      </View>
+      <View className="flex-row gap-3 mt-3">
+        <StatCard emoji="📝" value={`${totalCompleted}`} label="Exercises done" />
+        <StatCard emoji="🎯" value={`Lv. ${numericLevel}`} label="App level" />
+        <View className="flex-1 opacity-0" />
+      </View>
+      <View className="mt-4">
+        <View className="flex-row justify-between mb-1">
+          <Text className="text-xs text-slate-400 font-medium">Level {numericLevel}</Text>
+          <Text className="text-xs text-slate-400 font-medium">Level {numericLevel + 1}</Text>
+        </View>
+        <View className="bg-slate-100 rounded-full h-2">
+          <View className="bg-primary-500 h-2 rounded-full" style={{ width: `${Math.round(levelProgress * 100)}%` }} />
+        </View>
+        <Text className="text-xs text-slate-400 mt-1 text-right">
+          {Math.round(levelProgress * 100)}% to next level
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── CEFR track sub-component ────────────────────────────────────────────
+
+function CEFRTrack({ currentLevel, descriptor }: { currentLevel: CEFRLevel; descriptor: string }) {
+  const cefrIndex = CEFR_LEVELS.indexOf(currentLevel);
+  return (
+    <View className="bg-white rounded-2xl p-5 border border-slate-100">
+      <Text className="text-slate-800 font-bold text-base mb-3">CEFR Progress</Text>
+      <View className="flex-row items-center gap-1 mb-3">
+        {CEFR_LEVELS.map((lvl, i) => {
+          const isActive = lvl === currentLevel;
+          const isPast = cefrIndex > i;
+          return (
+            <View key={lvl} className="flex-1 items-center">
+              <View
+                className={`w-9 h-9 rounded-full items-center justify-center mb-1
+                  ${isActive ? 'bg-primary-600' : isPast ? 'bg-primary-200' : 'bg-slate-100'}`}
+              >
+                <Text className={`text-xs font-bold ${isActive ? 'text-white' : isPast ? 'text-primary-700' : 'text-slate-400'}`}>
+                  {lvl}
+                </Text>
+              </View>
+              {i < CEFR_LEVELS.length - 1 ? (
+                <View className={`absolute right-0 top-4 w-full h-0.5 ${isPast ? 'bg-primary-200' : 'bg-slate-100'}`} style={{ zIndex: -1 }} />
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+      <Text className="text-slate-500 text-xs">{descriptor}</Text>
+    </View>
+  );
+}
+
+// ─── Goal sheet sub-component ────────────────────────────────────────────
+
+function GoalSheet({
+  currentGoal,
+  onSelect,
+  onCancel,
+}: {
+  currentGoal: number;
+  onSelect: (goal: number) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <View className="bg-white rounded-2xl border border-slate-200 p-5 mt-2">
+      <Text className="text-slate-800 font-bold text-base mb-4">Daily Goal</Text>
+      <View className="flex-row flex-wrap gap-3 mb-4">
+        {[10, 20, 30, 50].map((goal) => (
+          <Pressable
+            key={goal}
+            onPress={() => onSelect(goal)}
+            className={`flex-1 min-w-[70px] rounded-xl py-3 items-center border
+              ${currentGoal === goal
+                ? 'bg-primary-600 border-primary-600'
+                : 'bg-slate-50 border-slate-200'}`}
+          >
+            <Text className={`font-bold text-base ${currentGoal === goal ? 'text-white' : 'text-slate-700'}`}>
+              {goal}
+            </Text>
+            <Text className={`text-xs ${currentGoal === goal ? 'text-primary-100' : 'text-slate-400'}`}>
+              XP/day
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Pressable className="items-center py-2" onPress={onCancel}>
+        <Text className="text-slate-400 text-sm">Cancel</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 // ─── Main screen ─────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const { signOut, isGuest } = useAuthStore();
   const user = useUserStore((s) => s.user);
-  const { streak } = useGamificationStore();
+  const setUser = useUserStore((s) => s.setUser);
+  const { streak, reinitDailyGoal } = useGamificationStore();
   const completedLessonIds = useLessonStore((s) => s.completedLessonIds);
+  const clearCourseRoadmap = useLessonStore((s) => s.clearCourseRoadmap);
   const { settings, updateSetting } = useSettingsStore();
   const syncError = useSyncStore((s) => s.syncError);
   const syncStatus = useSyncStore((s) => s.syncStatus);
 
+  const [showGoalSheet, setShowGoalSheet] = useState(false);
   const [typeAccuracy, setTypeAccuracy] = useState<TypeAccuracy[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [totalStats, setTotalStats] = useState<TotalStats>({ completed: 0, correct: 0, uniqueTopics: 0 });
@@ -114,12 +246,19 @@ export default function ProfileScreen() {
 
   if (!user) return null;
 
+  async function handleSetGoal(goal: number) {
+    if (!user) return;
+    await updateDailyGoal(user.id, goal);
+    setUser({ ...user, daily_goal: goal });
+    reinitDailyGoal(goal);
+    setShowGoalSheet(false);
+  }
+
   const { level: numericLevel, progress: levelProgress } = xpToLevel(user.xp);
   const overallAccuracyPct = totalStats.completed > 0
     ? Math.round((totalStats.correct / totalStats.completed) * 100)
     : 0;
 
-  const cefrIndex = CEFR_LEVELS.indexOf(user.current_level);
   const initial = user.display_name?.[0]?.toUpperCase() ?? '?';
 
   return (
@@ -167,44 +306,17 @@ export default function ProfileScreen() {
         ) : null}
 
         {/* Stats grid */}
-        <View className="bg-white rounded-2xl p-5 border border-slate-100">
-          <Text className="text-slate-800 font-bold text-base mb-4">Stats</Text>
-          <View className="flex-row flex-wrap gap-3">
-            <StatCard emoji="⭐" value={user.xp.toLocaleString()} label="Total XP" />
-            <StatCard emoji="🔥" value={`${user.streak_count}`} label="Current streak" />
-            <StatCard emoji="🏅" value={`${streak.longest_streak}`} label="Best streak" />
-            <StatCard emoji="📚" value={`${completedLessonIds.length}`} label="Lessons done" />
-            <StatCard
-              emoji="✅"
-              value={totalStats.completed > 0 ? `${overallAccuracyPct}%` : '—'}
-              label="Accuracy"
-            />
-            <StatCard
-              emoji="💡"
-              value={totalStats.uniqueTopics > 0 ? `${totalStats.uniqueTopics}` : '—'}
-              label="Topics learned"
-            />
-          </View>
-          <View className="flex-row gap-3 mt-3">
-            <StatCard emoji="📝" value={`${totalStats.completed}`} label="Exercises done" />
-            <StatCard emoji="🎯" value={`Lv. ${numericLevel}`} label="App level" />
-            <View className="flex-1 opacity-0" />
-          </View>
-
-          {/* Level progress bar */}
-          <View className="mt-4">
-            <View className="flex-row justify-between mb-1">
-              <Text className="text-xs text-slate-400 font-medium">Level {numericLevel}</Text>
-              <Text className="text-xs text-slate-400 font-medium">Level {numericLevel + 1}</Text>
-            </View>
-            <View className="bg-slate-100 rounded-full h-2">
-              <View className="bg-primary-500 h-2 rounded-full" style={{ width: `${Math.round(levelProgress * 100)}%` }} />
-            </View>
-            <Text className="text-xs text-slate-400 mt-1 text-right">
-              {Math.round(levelProgress * 100)}% to next level
-            </Text>
-          </View>
-        </View>
+        <StatsGrid
+          xp={user.xp}
+          streakCount={user.streak_count}
+          longestStreak={streak.longest_streak}
+          lessonsCount={completedLessonIds.length}
+          overallAccuracyPct={overallAccuracyPct}
+          uniqueTopics={totalStats.uniqueTopics}
+          totalCompleted={totalStats.completed}
+          numericLevel={numericLevel}
+          levelProgress={levelProgress}
+        />
 
         {/* Weekly activity chart */}
         {weeklyActivity.length > 0 ? (
@@ -228,33 +340,7 @@ export default function ProfileScreen() {
         ) : null}
 
         {/* CEFR level track */}
-        <View className="bg-white rounded-2xl p-5 border border-slate-100">
-          <Text className="text-slate-800 font-bold text-base mb-3">CEFR Progress</Text>
-          <View className="flex-row items-center gap-1 mb-3">
-            {CEFR_LEVELS.map((lvl, i) => {
-              const isActive = lvl === user.current_level;
-              const isPast = cefrIndex > i;
-              return (
-                <View key={lvl} className="flex-1 items-center">
-                  <View
-                    className={`w-9 h-9 rounded-full items-center justify-center mb-1
-                      ${isActive ? 'bg-primary-600' : isPast ? 'bg-primary-200' : 'bg-slate-100'}`}
-                  >
-                    <Text className={`text-xs font-bold ${isActive ? 'text-white' : isPast ? 'text-primary-700' : 'text-slate-400'}`}>
-                      {lvl}
-                    </Text>
-                  </View>
-                  {i < CEFR_LEVELS.length - 1 ? (
-                    <View className={`absolute right-0 top-4 w-full h-0.5 ${isPast ? 'bg-primary-200' : 'bg-slate-100'}`} style={{ zIndex: -1 }} />
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-          <Text className="text-slate-500 text-xs">
-            {CEFR_DESCRIPTORS[user.current_level]}
-          </Text>
-        </View>
+        <CEFRTrack currentLevel={user.current_level} descriptor={CEFR_DESCRIPTORS[user.current_level]} />
 
         {/* Current language */}
         <View className="bg-white rounded-2xl p-5 border border-slate-100 flex-row items-center gap-4">
@@ -268,12 +354,26 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Language change link */}
+        <Pressable
+          className="items-center py-3"
+          onPress={() => {
+            clearCourseRoadmap();
+            router.push('/(onboarding)/select-target');
+          }}
+        >
+          <Text className="text-primary-600 text-sm font-semibold">Change language →</Text>
+        </Pressable>
+
         {/* Settings */}
         <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-          <View className="flex-row justify-between items-center px-5 py-4 border-b border-slate-100">
+          <Pressable
+            className="flex-row justify-between items-center px-5 py-4 border-b border-slate-100 active:opacity-70"
+            onPress={() => setShowGoalSheet((v) => !v)}
+          >
             <Text className="text-slate-700 font-medium">Daily Goal</Text>
             <Text className="text-slate-400 text-sm">{user.daily_goal} XP/day</Text>
-          </View>
+          </Pressable>
 
           <View className="flex-row justify-between items-center px-5 py-3 border-b border-slate-100">
             <Text className="text-slate-700 font-medium">Haptic Feedback</Text>
@@ -293,6 +393,23 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+
+        {/* Daily goal inline sheet */}
+        {showGoalSheet ? (
+          <GoalSheet
+            currentGoal={user.daily_goal}
+            onSelect={handleSetGoal}
+            onCancel={() => setShowGoalSheet(false)}
+          />
+        ) : null}
+
+        {/* Streak freeze indicator */}
+        {!streak.freeze_used_this_week ? (
+          <View className="bg-blue-50 rounded-2xl p-4 border border-blue-100 flex-row items-center gap-3">
+            <Text className="text-2xl">🧊</Text>
+            <Text className="text-blue-700 text-sm font-semibold flex-1">Streak freeze available this week</Text>
+          </View>
+        ) : null}
 
         {/* Sign out */}
         <Pressable
