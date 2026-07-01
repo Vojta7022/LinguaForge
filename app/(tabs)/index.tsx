@@ -77,6 +77,33 @@ function GuidebookCard({ unit }: { unit: RoadmapUnitDefinition }) {
   );
 }
 
+function CourseMapGraphic({ units }: { units: RoadmapUnitDefinition[] }) {
+  const preview = units.slice(0, 5);
+  return (
+    <View className="mt-5 bg-white/10 rounded-3xl p-4 border border-white/15">
+      <View className="flex-row items-center justify-between">
+        {preview.map((unit, index) => (
+          <View key={unit.id} className="items-center">
+            <View
+              className={`w-11 h-11 rounded-full items-center justify-center border-2 ${
+                index === 0 ? 'bg-white border-white' : 'bg-primary-500 border-primary-300'
+              }`}
+            >
+              <Text className="text-xl">{unit.icon}</Text>
+            </View>
+            {index < preview.length - 1 ? (
+              <View className="absolute left-11 top-5 h-0.5 w-8 bg-primary-300" />
+            ) : null}
+          </View>
+        ))}
+      </View>
+      <Text className="text-primary-100 text-xs font-semibold mt-3">
+        AI-planned around your interests
+      </Text>
+    </View>
+  );
+}
+
 function PathLessonNode({
   lesson,
   status,
@@ -233,7 +260,9 @@ function roadmapMatchesUser(roadmap: CourseRoadmap | null, user: User | null) {
   return (
     roadmap.language === user.target_language &&
     roadmap.nativeLanguage === user.native_language &&
-    roadmap.level === user.current_level
+    roadmap.level === user.current_level &&
+    roadmap.learningInterests === (user.learning_interests?.trim() || null) &&
+    roadmap.avoidedTopics === (user.avoided_topics?.trim() || null)
   );
 }
 
@@ -256,7 +285,13 @@ export default function HomeScreen() {
   const lessonPrefetchKeyRef = useRef<string | null>(null);
   userIdRef.current = user?.id;
   const currentRoadmapKey = user
-    ? `${user.target_language}:${user.native_language}:${user.current_level}`
+    ? [
+      user.target_language,
+      user.native_language,
+      user.current_level,
+      user.learning_interests ?? '',
+      user.avoided_topics ?? '',
+    ].join(':')
     : null;
 
   useFocusEffect(
@@ -287,6 +322,8 @@ export default function HomeScreen() {
       user.target_language,
       user.native_language,
       user.current_level,
+      user.learning_interests,
+      user.avoided_topics,
     ).then((roadmap) => {
       if (cancelled) return;
       setCourseRoadmap(roadmap);
@@ -390,6 +427,7 @@ export default function HomeScreen() {
         <Text className="text-primary-100 text-sm mt-2 leading-5">
           {roadmap?.summary ?? 'AI is preparing a structured path with clear unit goals.'}
         </Text>
+        {roadmap?.units.length ? <CourseMapGraphic units={roadmap.units} /> : null}
       </View>
 
       <View className="px-5 py-5 gap-4">

@@ -20,6 +20,8 @@ import ClozeExercise from './ClozeExercise';
 import IdiomMatchExercise from './IdiomMatchExercise';
 import ContextualVocabExercise from './ContextualVocabExercise';
 import ListeningExercise from './ListeningExercise';
+import SpeakingExercise from './SpeakingExercise';
+import DialogueExercise from './DialogueExercise';
 
 import type {
   Exercise,
@@ -35,6 +37,8 @@ import type {
   IdiomMatchContent,
   ContextualVocabContent,
   ListeningContent,
+  SpeakingContent,
+  DialogueContent,
 } from '@/types/exercise';
 import type { SupportedLanguage } from '@/types/user';
 import { getFeedback } from '@/utils/exerciseHelpers';
@@ -59,6 +63,8 @@ const EXERCISE_LABELS: Record<ExerciseType, string> = {
   IDIOM_MATCH: 'Match the meanings',
   CONTEXTUAL_VOCAB: 'Choose the right word',
   LISTENING: 'Listen and choose',
+  SPEAKING: 'Speak aloud',
+  DIALOGUE: 'Read the dialogue',
   WORD_MATCH: 'Match the pairs',
   WORD_BANK_TRANSLATE: 'Tap the tiles',
 };
@@ -265,6 +271,22 @@ export default function ExerciseShell({
               onAnswerChange={setSelectedAnswer}
               isChecked={isChecked}
               isCorrect={isCorrect}
+            />
+          )}
+          {exercise.type === 'SPEAKING' && (
+            <SpeakingExercise
+              content={exercise.content as SpeakingContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
+            />
+          )}
+          {exercise.type === 'DIALOGUE' && (
+            <DialogueExercise
+              content={exercise.content as DialogueContent}
+              selectedAnswer={selectedAnswer}
+              onAnswerChange={setSelectedAnswer}
+              isChecked={isChecked}
             />
           )}
         </View>

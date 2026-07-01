@@ -112,8 +112,39 @@ function normalizeExerciseItem(item: unknown): unknown {
     record.distractor_words = toStringArray(record.distractor_words);
   }
 
+  if (record.type === 'CLOZE' && Array.isArray(record.blanks)) {
+    record.blanks = record.blanks.map((blank) => {
+      if (!blank || typeof blank !== 'object') return blank;
+      const b = { ...(blank as Record<string, unknown>) };
+      b.acceptable_answers = toStringArray(b.acceptable_answers);
+      if (
+        (!Array.isArray(b.acceptable_answers) || b.acceptable_answers.length === 0) &&
+        typeof b.correct_answer === 'string'
+      ) {
+        b.acceptable_answers = [b.correct_answer];
+      }
+      b.word_bank = toStringArray(b.word_bank);
+      return b;
+    });
+  }
+
+  if (record.type === 'IDIOM_MATCH') {
+    record.idioms = toStringArray(record.idioms);
+    record.meanings = toStringArray(record.meanings);
+  }
+
   if (record.type === 'SENTENCE_REORDER') {
     record.words = toStringArray(record.words);
+  }
+
+  if (record.type === 'DIALOGUE' && Array.isArray(record.turns)) {
+    record.turns = record.turns
+      .filter((turn) => turn && typeof turn === 'object')
+      .map((turn) => ({
+        speaker: String((turn as Record<string, unknown>).speaker ?? '').trim(),
+        line: String((turn as Record<string, unknown>).line ?? '').trim(),
+      }))
+      .filter((turn) => turn.speaker.length > 0 && turn.line.length > 0);
   }
 
   if (record.type === 'WORD_MATCH' && Array.isArray(record.pairs)) {
@@ -214,6 +245,27 @@ export const ListeningSchema = z.object({
   transcript: z.string().optional(),
 });
 
+export const SpeakingSchema = z.object({
+  type: z.literal('SPEAKING'),
+  prompt_text: z.string().min(5),
+  tts_locale: z.string().min(2),
+  expected_phrase: z.string().min(5),
+  pronunciation_tip: z.string().min(5),
+});
+
+export const DialogueSchema = z.object({
+  type: z.literal('DIALOGUE'),
+  title: z.string().min(3),
+  turns: z.array(z.object({
+    speaker: z.string().min(1),
+    line: z.string().min(3),
+  })).min(2).max(8),
+  question: z.string().min(5),
+  options: z.tuple([z.string(), z.string(), z.string(), z.string()]),
+  correct_index: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+  explanation: z.string().min(10),
+});
+
 export const WordMatchSchema = z.object({
   type: z.literal('WORD_MATCH'),
   pairs: z.array(z.object({
@@ -251,6 +303,8 @@ const ClozeAISchema = ClozeSchema.merge(aiMetaSchema);
 const IdiomMatchAISchema = IdiomMatchSchema.merge(aiMetaSchema);
 const ContextualVocabAISchema = ContextualVocabSchema.merge(aiMetaSchema);
 const ListeningAISchema = ListeningSchema.merge(aiMetaSchema);
+const SpeakingAISchema = SpeakingSchema.merge(aiMetaSchema);
+const DialogueAISchema = DialogueSchema.merge(aiMetaSchema);
 const WordMatchAISchema = WordMatchSchema.merge(aiMetaSchema);
 const WordBankTranslateAISchema = WordBankTranslateSchema.merge(aiMetaSchema);
 
@@ -264,6 +318,8 @@ export const AIExerciseSchema = z.discriminatedUnion('type', [
   IdiomMatchAISchema,
   ContextualVocabAISchema,
   ListeningAISchema,
+  SpeakingAISchema,
+  DialogueAISchema,
   WordMatchAISchema,
   WordBankTranslateAISchema,
 ]);

@@ -11,6 +11,7 @@ import { updateDailyGoal } from '@/repositories/userRepository';
 import { xpToLevel } from '@/utils/xpCalculator';
 import { LANGUAGE_FLAGS, LANGUAGE_NAMES, CEFR_DESCRIPTORS } from '@/types/user';
 import type { CEFRLevel } from '@/types/user';
+import type { DailyQuest, LeagueStanding } from '@/types/gamification';
 import {
   getAccuracyByType,
   getWeeklyActivity,
@@ -80,6 +81,62 @@ function WeeklyChart({ data }: { data: DayActivity[] }) {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+function HeartsCard({ current, max }: { current: number; max: number }) {
+  return (
+    <View className="bg-white rounded-2xl p-5 border border-slate-100">
+      <Text className="text-slate-800 font-bold text-base mb-3">Hearts</Text>
+      <View className="flex-row gap-2">
+        {Array.from({ length: max }, (_, i) => (
+          <Text key={i} className="text-2xl">{i < current ? '❤️' : '🤍'}</Text>
+        ))}
+      </View>
+      <Text className="text-slate-400 text-xs mt-2">Wrong answers cost hearts.</Text>
+    </View>
+  );
+}
+
+function QuestCard({ quests }: { quests: DailyQuest[] }) {
+  return (
+    <View className="bg-white rounded-2xl p-5 border border-slate-100">
+      <Text className="text-slate-800 font-bold text-base mb-3">Daily Quests</Text>
+      {quests.map((quest) => {
+        const pct = Math.round((quest.progress / quest.target) * 100);
+        return (
+          <View key={quest.id} className="mb-3">
+            <View className="flex-row justify-between mb-1">
+              <Text className="text-slate-700 text-sm font-medium">{quest.emoji} {quest.title}</Text>
+              <Text className="text-slate-400 text-xs">+{quest.xp_reward} XP</Text>
+            </View>
+            <View className="bg-slate-100 rounded-full h-2">
+              <View className="bg-primary-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function LeagueCard({ standings }: { standings: LeagueStanding[] }) {
+  return (
+    <View className="bg-white rounded-2xl p-5 border border-slate-100">
+      <Text className="text-slate-800 font-bold text-base mb-3">League</Text>
+      {standings.slice(0, 6).map((row, index) => (
+        <View
+          key={row.name}
+          className={`flex-row items-center py-2 ${row.is_user ? 'bg-primary-50 rounded-xl px-2' : ''}`}
+        >
+          <Text className="text-slate-400 text-sm w-7">{index + 1}</Text>
+          <Text className={`flex-1 text-sm ${row.is_user ? 'text-primary-700 font-bold' : 'text-slate-700'}`}>
+            {row.name}
+          </Text>
+          <Text className="text-slate-500 text-sm font-semibold">{row.xp} XP</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -218,7 +275,7 @@ export default function ProfileScreen() {
   const { signOut, isGuest } = useAuthStore();
   const user = useUserStore((s) => s.user);
   const setUser = useUserStore((s) => s.setUser);
-  const { streak, reinitDailyGoal } = useGamificationStore();
+  const { streak, reinitDailyGoal, hearts, dailyQuests, getLeagueStandings } = useGamificationStore();
   const completedLessonIds = useLessonStore((s) => s.completedLessonIds);
   const clearCourseRoadmap = useLessonStore((s) => s.clearCourseRoadmap);
   const { settings, updateSetting } = useSettingsStore();
@@ -260,6 +317,7 @@ export default function ProfileScreen() {
     : 0;
 
   const initial = user.display_name?.[0]?.toUpperCase() ?? '?';
+  const leagueStandings = getLeagueStandings(user);
 
   return (
     <ScrollView className="flex-1 bg-slate-50" showsVerticalScrollIndicator={false}>
@@ -317,6 +375,10 @@ export default function ProfileScreen() {
           numericLevel={numericLevel}
           levelProgress={levelProgress}
         />
+
+        <HeartsCard current={hearts.current} max={hearts.max} />
+        <QuestCard quests={dailyQuests} />
+        <LeagueCard standings={leagueStandings} />
 
         {/* Weekly activity chart */}
         {weeklyActivity.length > 0 ? (

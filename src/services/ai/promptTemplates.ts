@@ -68,10 +68,10 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'WORD_MATCH',
       'MULTIPLE_CHOICE',
       'WORD_BANK_TRANSLATE',
-      'WORD_BANK_TRANSLATE',
       'FILL_BLANK',
-      'MULTIPLE_CHOICE',
-      'SENTENCE_REORDER',
+      'CONTEXTUAL_VOCAB',
+      'LISTENING',
+      'SPEAKING',
       'TRANSLATE',
     ],
   },
@@ -84,9 +84,9 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'FILL_BLANK',
       'SENTENCE_REORDER',
       'WORD_BANK_TRANSLATE',
-      'FILL_BLANK',
+      'ERROR_CORRECTION',
+      'CLOZE',
       'TRANSLATE',
-      'MULTIPLE_CHOICE',
     ],
   },
   skill_practice: {
@@ -98,9 +98,9 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'IDIOM_MATCH',
       'WORD_BANK_TRANSLATE',
       'SENTENCE_REORDER',
-      'MULTIPLE_CHOICE',
-      'TRANSLATE',
       'CONTEXTUAL_VOCAB',
+      'DIALOGUE',
+      'TRANSLATE',
     ],
   },
   review: {
@@ -112,8 +112,8 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'FILL_BLANK',
       'CLOZE',
       'SENTENCE_REORDER',
-      'MULTIPLE_CHOICE',
-      'ERROR_CORRECTION',
+      'WORD_BANK_TRANSLATE',
+      'DIALOGUE',
       'TRANSLATE',
     ],
   },
@@ -125,8 +125,8 @@ const LESSON_BLUEPRINTS: Record<LessonKind, LessonBlueprint> = {
       'MULTIPLE_CHOICE',
       'LISTENING',
       'FILL_BLANK',
-      'LISTENING',
-      'TRANSLATE',
+      'DIALOGUE',
+      'SPEAKING',
     ] as ExerciseType[],
   },
 };
@@ -498,6 +498,45 @@ TYPE SPECS:
 - acceptable_translations should contain 2-4 valid target-language answers.
 - Keep translations natural, never word-for-word.
 
+7. ERROR_CORRECTION
+- Fields: type, incorrect_sentence, correct_sentence, error_explanation, error_category, difficulty_score, grammar_point, vocab_topic
+- error_category must be one of: "grammar", "vocabulary", "register", "spelling".
+- incorrect_sentence must contain exactly one realistic learner mistake.
+
+8. CLOZE
+- Fields: type, passage, blanks, difficulty_score, grammar_point, vocab_topic
+- passage should be one coherent short paragraph with numbered blanks implied by blank index.
+- blanks is an array of { "index": number, "correct_answer": "...", "acceptable_answers": ["..."], "word_bank": ["..."] }.
+- Each word_bank must include correct_answer and 2-4 distractors.
+
+9. IDIOM_MATCH
+- Fields: type, idioms, meanings, correct_pairs, difficulty_score, grammar_point, vocab_topic
+- idioms and meanings must have the same length, 3-5 items.
+- correct_pairs uses zero-based indexes: [idiomIndex, meaningIndex].
+- Idioms should be advanced but common enough for the learner's CEFR level.
+
+10. CONTEXTUAL_VOCAB
+- Fields: type, context_passage, target_word, question, options, correct_index, word_in_context, difficulty_score, grammar_point, vocab_topic
+- Exactly 4 options, exactly 1 correct.
+- Test nuance, collocation, register, or near-synonym choice.
+
+11. LISTENING
+- Fields: type, tts_text, tts_locale, question, options, correct_index, transcript, difficulty_score, grammar_point, vocab_topic
+- tts_text and transcript should match.
+- tts_locale should be a real locale for "${language}" such as "es-ES" or "cs-CZ".
+- Ask about meaning, inference, tone, or a key detail.
+
+12. SPEAKING
+- Fields: type, prompt_text, tts_locale, expected_phrase, pronunciation_tip, difficulty_score, grammar_point, vocab_topic
+- prompt_text and expected_phrase should be the same target-language sentence or a tiny natural variant.
+- pronunciation_tip should identify one concrete sound, stress, liaison, rhythm, or intonation point.
+
+13. DIALOGUE
+- Fields: type, title, turns, question, options, correct_index, explanation, difficulty_score, grammar_point, vocab_topic
+- turns is an array of 2-8 short conversation turns: { "speaker": "A", "line": "..." }.
+- The dialogue must reuse the lesson vocabulary and grammar in a natural adult context.
+- Ask one comprehension, inference, tone, or pragmatic meaning question.
+
 LANGUAGE PAIR:
 - Target language ISO code: "${language}"
 - Native language ISO code: "${nativeLanguage}"`;
@@ -508,13 +547,21 @@ export function buildRoadmapPrompt(
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
   unitCount = 10,
+  learningInterests?: string | null,
+  avoidedTopics?: string | null,
 ): { system: string; user: string } {
   const lang = LANGUAGE_NAMES[language];
   const nativeLang = LANGUAGE_NAMES[nativeLanguage];
+  const interests = learningInterests?.trim() || 'No stated interests. Choose varied adult topics likely to stay useful.';
+  const avoided = avoidedTopics?.trim() || 'None stated.';
 
   return {
     system: `You are a curriculum designer creating a Duolingo-style language path for adult learners. Respond with ONLY valid JSON.`,
     user: `Create a forward-looking course roadmap for a ${nativeLang}-speaking learner studying ${lang} at CEFR ${level}.
+
+Learner preferences:
+- Topics they want to learn through: ${interests}
+- Topics to avoid unless linguistically necessary: ${avoided}
 
 Design the roadmap like a bite-size app path:
 - Keep lessons short and focused.
@@ -523,11 +570,12 @@ Design the roadmap like a bite-size app path:
 - Make the progression feel coherent over the next ${unitCount} units.
 - Keep the content suitable for adult learners and real-world language, not childlike beginner content.
 
-Each unit MUST contain exactly 4 lessons in this order:
+Each unit MUST contain exactly 5 lessons in this order:
 1. "new_vocabulary" — introduce useful words/phrases for the unit theme
 2. "new_grammar" — teach one bite-size grammar pattern tied to the same theme
 3. "skill_practice" — mixed practice using the words + grammar already introduced
-4. "review" — retrieval practice only, no new material
+4. "listening" — comprehension with natural speech on the same theme
+5. "review" — retrieval practice only, no new material
 
 Return this exact JSON structure:
 {
@@ -560,14 +608,17 @@ Return this exact JSON structure:
 
 Requirements:
 - Exactly ${unitCount} units.
-- Exactly 4 lessons per unit.
+- Exactly 5 lessons per unit.
 - Every lesson must include at least 1 item in grammar_focus and at least 1 item in vocabulary_focus.
 - If a lesson is mainly vocabulary, repeat the supporting grammar focus from the unit instead of leaving grammar_focus empty.
 - If a lesson is mainly grammar, repeat the supporting vocabulary set from the unit instead of leaving vocabulary_focus empty.
 - Titles should be concise: 2-5 words for lessons, 2-6 words for units.
 - "review" lessons must explicitly avoid introducing new material.
+- "listening" lessons must reuse the same grammar_focus and vocabulary_focus as the unit.
 - The roadmap must feel cumulative from Unit 1 through Unit ${unitCount}.
-- Use real adult contexts: work, travel, news, relationships, study, culture, public life.
+- You choose the unit topics. They must be coherent, varied, and primarily based on the learner preferences above.
+- Avoid the learner's avoided topics.
+- Use real adult contexts, not random sentence themes.
 - Keep the progression aligned with ${level}.
 - Return JSON only. No markdown, no notes, no commentary.`,
   };
@@ -673,7 +724,20 @@ export function buildExercisePrompt(
       user = sentenceReorderPrompt(lang, nativeLang, level, topic, count);
       break;
     default:
-      user = `Generate 6 ${type} exercises. Return JSON: { "exercises": [] }`;
+      user = `Generate ${count} ${type} exercises in ${lang} for a ${nativeLang}-speaking learner at CEFR level ${level}.
+
+Level ${level} means: use ${getLevelInstruction(level)}
+
+Topic focus: ${topic}
+
+Use the matching schema from these type specs:
+${lessonTypeSpecs(language, nativeLanguage)}
+
+Requirements:
+- Return JSON only in this shape: { "exercises": [] }.
+- Every exercise must have type "${type}".
+- difficulty_score must be an integer in the appropriate range for ${level}.
+- Keep content adult, natural, and on-topic.`;
   }
 
   return { system: SYSTEM_PROMPT + languageSpecificAddendum(language), user };

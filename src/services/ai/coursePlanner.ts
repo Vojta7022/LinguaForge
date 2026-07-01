@@ -20,8 +20,10 @@ function buildRoadmapCacheKey(
   language: SupportedLanguage,
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
+  learningInterests?: string | null,
+  avoidedTopics?: string | null,
 ): string {
-  return djb2(`roadmap:v2:${language}:${nativeLanguage}:${level}`);
+  return djb2(`roadmap:v4:${language}:${nativeLanguage}:${level}:${learningInterests ?? ''}:${avoidedTopics ?? ''}`);
 }
 
 function slugify(value: string): string {
@@ -48,6 +50,8 @@ function buildRoadmapFromAI(
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
   cacheKey: string,
+  learningInterests?: string | null,
+  avoidedTopics?: string | null,
 ): CourseRoadmap {
   const parsed = parseRoadmapResponse(raw);
   const fallbackRoadmap = buildFallbackRoadmap(language, nativeLanguage, level);
@@ -132,6 +136,8 @@ function buildRoadmapFromAI(
     language,
     nativeLanguage,
     level,
+    learningInterests: learningInterests?.trim() || null,
+    avoidedTopics: avoidedTopics?.trim() || null,
     units: units.map((entry) => entry.unit),
     lessons: units.flatMap((entry) => entry.lessons),
     generatedAt,
@@ -146,18 +152,43 @@ async function attemptProvider(
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
   cacheKey: string,
+  learningInterests?: string | null,
+  avoidedTopics?: string | null,
 ): Promise<CourseRoadmap> {
-  const { system, user } = buildRoadmapPrompt(language, nativeLanguage, level);
+  const { system, user } = buildRoadmapPrompt(
+    language,
+    nativeLanguage,
+    level,
+    10,
+    learningInterests,
+    avoidedTopics,
+  );
   const raw = await caller(system, user);
-  return buildRoadmapFromAI(raw, language, nativeLanguage, level, cacheKey);
+  return buildRoadmapFromAI(
+    raw,
+    language,
+    nativeLanguage,
+    level,
+    cacheKey,
+    learningInterests,
+    avoidedTopics,
+  );
 }
 
 export async function ensureCourseRoadmap(
   language: SupportedLanguage,
   nativeLanguage: SupportedLanguage,
   level: CEFRLevel,
+  learningInterests?: string | null,
+  avoidedTopics?: string | null,
 ): Promise<CourseRoadmap> {
-  const cacheKey = buildRoadmapCacheKey(language, nativeLanguage, level);
+  const cacheKey = buildRoadmapCacheKey(
+    language,
+    nativeLanguage,
+    level,
+    learningInterests,
+    avoidedTopics,
+  );
   const cached = await getCachedRoadmap(cacheKey);
   if (cached) return cached;
 
@@ -170,7 +201,15 @@ export async function ensureCourseRoadmap(
   }
 
   try {
-    const roadmap = await attemptProvider(callGroqRaw, language, nativeLanguage, level, cacheKey);
+    const roadmap = await attemptProvider(
+      callGroqRaw,
+      language,
+      nativeLanguage,
+      level,
+      cacheKey,
+      learningInterests,
+      avoidedTopics,
+    );
     await storeRoadmap(cacheKey, roadmap);
     return roadmap;
   } catch (groqErr) {
@@ -178,7 +217,15 @@ export async function ensureCourseRoadmap(
   }
 
   try {
-    const roadmap = await attemptProvider(callGeminiRaw, language, nativeLanguage, level, cacheKey);
+    const roadmap = await attemptProvider(
+      callGeminiRaw,
+      language,
+      nativeLanguage,
+      level,
+      cacheKey,
+      learningInterests,
+      avoidedTopics,
+    );
     await storeRoadmap(cacheKey, roadmap);
     return roadmap;
   } catch (geminiErr) {

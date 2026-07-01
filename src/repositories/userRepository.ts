@@ -12,12 +12,13 @@ export async function upsertUser(user: User): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO users
      (id, display_name, email, native_language, target_language,
-      current_level, xp, streak_count, streak_last_date, daily_goal,
-      created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      current_level, learning_interests, avoided_topics, xp, streak_count,
+      streak_last_date, daily_goal, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [user.id, user.display_name, user.email, user.native_language,
-     user.target_language, user.current_level, user.xp, user.streak_count,
-     user.streak_last_date, user.daily_goal, user.created_at, user.updated_at],
+     user.target_language, user.current_level, user.learning_interests,
+     user.avoided_topics, user.xp, user.streak_count, user.streak_last_date,
+     user.daily_goal, user.created_at, user.updated_at],
   );
 }
 

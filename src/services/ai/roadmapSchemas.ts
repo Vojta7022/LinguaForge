@@ -29,7 +29,7 @@ const LessonPlanSchema = z.object({
   title: LooseStringSchema.catch(''),
   description: LooseStringSchema.catch(''),
   topic: LooseStringSchema.catch(''),
-  lesson_kind: z.enum(['new_vocabulary', 'new_grammar', 'skill_practice', 'review']).catch('skill_practice'),
+  lesson_kind: z.enum(['new_vocabulary', 'new_grammar', 'skill_practice', 'listening', 'review']).catch('skill_practice'),
   skill_type: z.enum(['vocabulary', 'grammar', 'mixed']).catch('mixed'),
   focus_label: LooseStringSchema.catch(''),
   objective: LooseStringSchema.catch(''),
@@ -46,7 +46,7 @@ const RoadmapUnitSchema = z.object({
   can_do: LooseStringArraySchema.catch([]),
   lessons: z.preprocess(
     (value) => (Array.isArray(value) ? value : []),
-    z.array(LessonPlanSchema).max(4),
+    z.array(LessonPlanSchema).max(5),
   ).catch([]),
 });
 

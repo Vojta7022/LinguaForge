@@ -6,6 +6,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="welcome" />
       <Stack.Screen name="select-native" />
       <Stack.Screen name="select-target" />
+      <Stack.Screen name="learning-preferences" />
       <Stack.Screen name="placement-test" />
       <Stack.Screen name="daily-goal" />
       <Stack.Screen name="ready" />

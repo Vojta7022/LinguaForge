@@ -14,7 +14,7 @@ export default function LessonCompleteScreen() {
   const session = useLessonStore((s) => s.activeSession);
   const markLessonComplete = useLessonStore((s) => s.markLessonComplete);
   const { awardXP, awardDailyGoalBonus, checkAndUpdateStreak,
-    dailyGoalJustMet, streakMilestone, clearMilestone } = useGamificationStore();
+    dailyGoalJustMet, streakMilestone, clearMilestone, recordLessonComplete } = useGamificationStore();
   const { user, addXP, saveToDB, setUser } = useUserStore();
   const courseRoadmap = useLessonStore((s) => s.courseRoadmap);
   const roadmapLessons = courseRoadmap?.lessons ?? EMPTY_LESSONS;
@@ -56,6 +56,8 @@ export default function LessonCompleteScreen() {
       setGoalBonus(bonus);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+
+    extra += recordLessonComplete(isPerfect);
 
     setTotalXPAwarded(baseXP + extra);
     addXP(baseXP + extra);

@@ -110,6 +110,13 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON course_roadmaps(cache_key);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE users ADD COLUMN learning_interests TEXT;
+      ALTER TABLE users ADD COLUMN avoided_topics TEXT;
+    `,
+  },
 ];
 
 /** Run pending migrations. Safe to call on every app start. */

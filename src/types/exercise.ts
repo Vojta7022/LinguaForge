@@ -10,6 +10,8 @@ export type ExerciseType =
   | 'IDIOM_MATCH'
   | 'CONTEXTUAL_VOCAB'
   | 'LISTENING'
+  | 'SPEAKING'
+  | 'DIALOGUE'
   | 'WORD_MATCH'
   | 'WORD_BANK_TRANSLATE';
 
@@ -105,6 +107,29 @@ export interface ListeningContent {
   transcript?: string;
 }
 
+export interface SpeakingContent {
+  type: 'SPEAKING';
+  prompt_text: string;
+  tts_locale: string;
+  expected_phrase: string;
+  pronunciation_tip: string;
+}
+
+export interface DialogueTurn {
+  speaker: string;
+  line: string;
+}
+
+export interface DialogueContent {
+  type: 'DIALOGUE';
+  title: string;
+  turns: DialogueTurn[];
+  question: string;
+  options: [string, string, string, string];
+  correct_index: 0 | 1 | 2 | 3;
+  explanation: string;
+}
+
 export interface WordMatchContent {
   type: 'WORD_MATCH';
   /** 4–6 word pairs: target-language word + native-language translation */
@@ -140,6 +165,8 @@ export type ExerciseContent =
   | IdiomMatchContent
   | ContextualVocabContent
   | ListeningContent
+  | SpeakingContent
+  | DialogueContent
   | WordMatchContent
   | WordBankTranslateContent;
 

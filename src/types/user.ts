@@ -12,6 +12,8 @@ export interface User {
   native_language: SupportedLanguage;
   target_language: SupportedLanguage;
   current_level: CEFRLevel;
+  learning_interests: string | null;
+  avoided_topics: string | null;
   xp: number;
   streak_count: number;
   streak_last_date: string | null; // ISO date YYYY-MM-DD

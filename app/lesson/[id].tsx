@@ -49,11 +49,17 @@ export default function LessonScreen() {
   const setLessonAccuracy = useLessonStore((s) => s.setLessonAccuracy);
   const recordAttempt = useProgressStore((s) => s.recordAttempt);
   const awardXP = useGamificationStore((s) => s.awardXP);
+  const hearts = useGamificationStore((s) => s.hearts);
+  const loseHeart = useGamificationStore((s) => s.loseHeart);
 
   const consecutiveCorrectRef = useRef(0);
 
   useEffect(() => {
     if (!user) return;
+    if (hearts.current <= 0) {
+      setGenerationError('You are out of hearts. Wait for a refill before starting a new lesson.');
+      return;
+    }
     let cancelled = false;
     reset();
     setGenerating(true);
@@ -83,6 +89,7 @@ export default function LessonScreen() {
     };
   }, [
     user,
+    hearts.current,
     id,
     effectiveLevel,
     lessonSignature,
@@ -115,6 +122,7 @@ export default function LessonScreen() {
       addXP(xp);
       consecutiveCorrectRef.current += 1;
     } else {
+      loseHeart();
       consecutiveCorrectRef.current = 0;
     }
 
@@ -162,6 +170,7 @@ export default function LessonScreen() {
     recordAttempt,
     recordLessonAnswer,
     awardXP,
+    loseHeart,
     addLessonXP,
     addXP,
     setLessonAccuracy,

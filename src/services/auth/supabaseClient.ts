@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 /**
  * expo-secure-store has a 2048-byte value limit on iOS.
@@ -7,9 +8,19 @@ import * as SecureStore from 'expo-secure-store';
  * We chunk large values across multiple SecureStore keys.
  */
 const CHUNK_SIZE = 1500;
+const webMemoryStorage = new Map<string, string>();
+
+function webStorage() {
+  const storage = globalThis.localStorage;
+  return typeof storage?.getItem === 'function' ? storage : null;
+}
 
 const SecureStoreAdapter = {
   async getItem(key: string): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      return webStorage()?.getItem(key) ?? webMemoryStorage.get(key) ?? null;
+    }
+
     const countStr = await SecureStore.getItemAsync(`${key}__chunks`);
     if (!countStr) {
       return SecureStore.getItemAsync(key);
@@ -25,6 +36,13 @@ const SecureStoreAdapter = {
   },
 
   async setItem(key: string, value: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      const storage = webStorage();
+      if (storage) storage.setItem(key, value);
+      else webMemoryStorage.set(key, value);
+      return;
+    }
+
     if (value.length <= CHUNK_SIZE) {
       return SecureStore.setItemAsync(key, value);
     }
@@ -39,6 +57,13 @@ const SecureStoreAdapter = {
   },
 
   async removeItem(key: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      const storage = webStorage();
+      if (storage) storage.removeItem(key);
+      webMemoryStorage.delete(key);
+      return;
+    }
+
     const countStr = await SecureStore.getItemAsync(`${key}__chunks`);
     if (countStr) {
       const count = parseInt(countStr, 10);

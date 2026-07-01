@@ -11,11 +11,14 @@ interface OnboardingState {
   targetLanguage: SupportedLanguage | null;
   level: CEFRLevel;
   dailyGoal: number;
+  learningInterests: string;
+  avoidedTopics: string;
 
   setNativeLanguage: (lang: SupportedLanguage) => void;
   setTargetLanguage: (lang: SupportedLanguage) => void;
   setLevel: (level: CEFRLevel) => void;
   setDailyGoal: (goal: number) => void;
+  setLearningPreferences: (interests: string, avoided: string) => void;
   reset: () => void;
 }
 
@@ -24,6 +27,8 @@ const DEFAULTS = {
   targetLanguage: null as SupportedLanguage | null,
   level: 'B2' as CEFRLevel,
   dailyGoal: 20,
+  learningInterests: '',
+  avoidedTopics: '',
 };
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -32,5 +37,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setTargetLanguage: (lang) => set({ targetLanguage: lang }),
   setLevel: (level) => set({ level }),
   setDailyGoal: (goal) => set({ dailyGoal: goal }),
+  setLearningPreferences: (learningInterests, avoidedTopics) =>
+    set({ learningInterests, avoidedTopics }),
   reset: () => set(DEFAULTS),
 }));

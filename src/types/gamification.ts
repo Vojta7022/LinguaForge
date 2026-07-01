@@ -31,6 +31,28 @@ export interface DailyGoalProgress {
   date: string;                // YYYY-MM-DD
 }
 
+export interface HeartsState {
+  current: number;
+  max: number;
+  next_refill_at: string | null;
+}
+
+export interface DailyQuest {
+  id: 'earn_xp' | 'complete_lesson' | 'perfect_lesson';
+  title: string;
+  emoji: string;
+  target: number;
+  progress: number;
+  xp_reward: number;
+  is_claimed: boolean;
+}
+
+export interface LeagueStanding {
+  name: string;
+  xp: number;
+  is_user: boolean;
+}
+
 /** XP difficulty multipliers */
 export const XP_MULTIPLIER: Record<CEFRLevel, number> = {
   B1: 1.0,

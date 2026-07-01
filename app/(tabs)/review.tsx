@@ -35,6 +35,10 @@ function getQuestionAndAnswer(content: ExerciseContent): { question: string; ans
       return { question: content.question, answer: content.options[content.correct_index] };
     case 'LISTENING':
       return { question: content.question, answer: content.options[content.correct_index] };
+    case 'SPEAKING':
+      return { question: content.prompt_text, answer: content.expected_phrase };
+    case 'DIALOGUE':
+      return { question: content.question, answer: content.options[content.correct_index] };
     case 'WORD_MATCH':
       return { question: content.pairs.map((p) => p.target).join(', '), answer: content.pairs.map((p) => p.native).join(', ') };
     case 'WORD_BANK_TRANSLATE':
@@ -53,6 +57,8 @@ function ExerciseTypeTag({ type }: { type: string }) {
     IDIOM_MATCH: 'Idioms',
     CONTEXTUAL_VOCAB: 'Vocab',
     LISTENING: 'Listening',
+    SPEAKING: 'Speaking',
+    DIALOGUE: 'Dialogue',
     WORD_MATCH: 'Word match',
     WORD_BANK_TRANSLATE: 'Word bank',
   };
@@ -120,7 +126,7 @@ export default function ReviewScreen() {
           <Pressable
             className={`mt-4 rounded-xl px-4 py-3 items-center
               ${dueCount > 0 ? 'bg-primary-600 active:opacity-80' : 'bg-slate-100'}`}
-            onPress={() => dueCount > 0 && router.push('/srs-review')}
+            onPress={() => dueCount > 0 && router.push('/srs-review' as never)}
             disabled={dueCount === 0}
           >
             <Text className={`font-semibold text-sm ${dueCount > 0 ? 'text-white' : 'text-slate-400'}`}>

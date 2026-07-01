@@ -13,7 +13,7 @@ export default function SelectTargetScreen() {
   function handleContinue() {
     if (!selected) return;
     setTargetLanguage(selected);
-    router.push('/(onboarding)/placement-test');
+    router.push('/(onboarding)/learning-preferences' as never);
   }
 
   return (

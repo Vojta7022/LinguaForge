@@ -101,6 +101,8 @@ export interface CourseRoadmap {
   language: SupportedLanguage;
   nativeLanguage: SupportedLanguage;
   level: CEFRLevel;
+  learningInterests: string | null;
+  avoidedTopics: string | null;
   units: RoadmapUnitDefinition[];
   lessons: LessonDefinition[];
   generatedAt: string;

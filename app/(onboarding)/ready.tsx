@@ -9,7 +9,15 @@ import type { User } from '@/types/user';
 
 export default function ReadyScreen() {
   const { session, isGuest, guestId, setOnboarded } = useAuthStore();
-  const { nativeLanguage, targetLanguage, level, dailyGoal, reset } = useOnboardingStore();
+  const {
+    nativeLanguage,
+    targetLanguage,
+    level,
+    dailyGoal,
+    learningInterests,
+    avoidedTopics,
+    reset,
+  } = useOnboardingStore();
   const { setUser } = useUserStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +42,8 @@ export default function ReadyScreen() {
         native_language: nativeLanguage,
         target_language: targetLanguage,
         current_level: level,
+        learning_interests: learningInterests.trim() || null,
+        avoided_topics: avoidedTopics.trim() || null,
         xp: 0,
         streak_count: 0,
         streak_last_date: null,

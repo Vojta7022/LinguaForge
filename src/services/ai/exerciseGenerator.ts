@@ -28,6 +28,13 @@ const SUPPORTED_LESSON_TYPES = new Set<ExerciseType>([
   'WORD_MATCH',
   'WORD_BANK_TRANSLATE',
   'SENTENCE_REORDER',
+  'ERROR_CORRECTION',
+  'CLOZE',
+  'IDIOM_MATCH',
+  'CONTEXTUAL_VOCAB',
+  'LISTENING',
+  'SPEAKING',
+  'DIALOGUE',
 ]);
 const lessonInFlight = new Map<string, Promise<Exercise[]>>();
 
@@ -126,6 +133,31 @@ function validateExercise(raw: AIExerciseRaw): boolean {
       }
       return true;
     }
+
+    case 'ERROR_CORRECTION':
+      return raw.incorrect_sentence !== raw.correct_sentence;
+
+    case 'CLOZE':
+      return raw.blanks.every((blank) =>
+        blank.word_bank.map((word) => word.toLowerCase()).includes(blank.correct_answer.toLowerCase()),
+      );
+
+    case 'IDIOM_MATCH':
+      return raw.correct_pairs.length === raw.idioms.length &&
+        raw.correct_pairs.every(([idiomIndex, meaningIndex]) =>
+          idiomIndex >= 0 &&
+          idiomIndex < raw.idioms.length &&
+          meaningIndex >= 0 &&
+          meaningIndex < raw.meanings.length,
+        );
+
+    case 'CONTEXTUAL_VOCAB':
+    case 'LISTENING':
+    case 'DIALOGUE':
+      return raw.correct_index >= 0 && raw.correct_index < raw.options.length;
+
+    case 'SPEAKING':
+      return raw.prompt_text.trim().length > 0 && raw.expected_phrase.trim().length > 0;
 
     default:
       return true;

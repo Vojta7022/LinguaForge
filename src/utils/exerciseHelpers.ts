@@ -7,6 +7,8 @@ import type {
   ListeningContent,
   MultipleChoiceContent,
   SentenceReorderContent,
+  SpeakingContent,
+  DialogueContent,
   TranslateContent,
   WordBankTranslateContent,
 } from '@/types/exercise';
@@ -21,6 +23,8 @@ export function getCorrectAnswer(exercise: Exercise): string {
     case 'ERROR_CORRECTION':     return c.correct_sentence;
     case 'CONTEXTUAL_VOCAB':     return c.options[c.correct_index];
     case 'LISTENING':            return c.options[c.correct_index];
+    case 'SPEAKING':             return c.expected_phrase;
+    case 'DIALOGUE':             return c.options[c.correct_index];
     case 'CLOZE':                return c.blanks.map((b) => b.correct_answer).join(', ');
     case 'IDIOM_MATCH':          return c.correct_pairs.map(([i, m]) => `${c.idioms[i]}→${c.meanings[m]}`).join(', ');
     case 'WORD_BANK_TRANSLATE':  return c.correct_sentence;
@@ -238,7 +242,7 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
       return { isCorrect: true, correctAnswerDisplay: '', explanation: '', isClose: false };
 
     case 'LISTENING': {
-      const lc = exercise.content;
+      const lc = exercise.content as ListeningContent;
       const correctOption = lc.options[lc.correct_index];
       const isCorrect = answer === correctOption;
       return {
@@ -246,6 +250,27 @@ export function getFeedback(exercise: Exercise, answer: string): AnswerFeedback 
         isClose: false,
         correctAnswerDisplay: correctOption,
         explanation: '',
+      };
+    }
+
+    case 'SPEAKING': {
+      const sp = exercise.content as SpeakingContent;
+      return {
+        isCorrect: answer === sp.expected_phrase,
+        isClose: false,
+        correctAnswerDisplay: sp.expected_phrase,
+        explanation: sp.pronunciation_tip,
+      };
+    }
+
+    case 'DIALOGUE': {
+      const dg = exercise.content as DialogueContent;
+      const correctOption = dg.options[dg.correct_index];
+      return {
+        isCorrect: answer === correctOption,
+        isClose: false,
+        correctAnswerDisplay: correctOption,
+        explanation: dg.explanation,
       };
     }
 
